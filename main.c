@@ -5,7 +5,10 @@
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
-#include <sim_manager.h>
+#include <semaphore.h>
+#include <sys/wait.h>
+#include "sim_manager.h"
+#include "central_proc.h"
 
 
 int main(int argc, char const *argv[]){
@@ -13,9 +16,9 @@ int main(int argc, char const *argv[]){
     int * shared_var;
     int shmid;
     sem_t *mutex;
-    
-    int max_x, max_y;
-    char* productlist[];
+
+    double max_x, max_y;
+    char* productlist;
 
 	shmid = shmget(IPC_PRIVATE, __getpagesize(),IPC_CREAT|0700);
 	shared_var = (int*) shmat(shmid, NULL, 0);
@@ -24,7 +27,8 @@ int main(int argc, char const *argv[]){
     if (process == 0){
         central_proc(shmid);
     } else {
-        
+      wait(NULL);
     }
+    shmctl(shmid, IPC_RMID, NULL);
     return 0;
 }
