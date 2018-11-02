@@ -1,14 +1,18 @@
 CC = gcc
-OBJS = main.o drone_movement.o central_proc.o
+OBJS = main.o drone_movement.o central_proc.o log.o
 PROG = out
 
+# ------------------------------------------------
 
 all:							${PROG}
 
 clean:
 									rm ${OBJS} ${PROG}
 
-drone_movement.o:	drone_movement.h	drone_movement.c
+# ------------------------------------------------
+log.o:						log.c log.h
+
+drone_movement.o:	drone_movement.c	drone_movement.h
 									${CC}	drone_movement.c -c -o drone_movement.o
 
 central_proc.o:		central_proc.c central_proc.h

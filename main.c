@@ -9,9 +9,12 @@
 #include <sys/wait.h>
 #include "sim_manager.h"
 #include "central_proc.h"
+#include "log.h"
 
 
 int main(int argc, char const *argv[]){
+
+  log_it("SIMULATION INITIATED");
 
     int * shared_var;
     int shmid;
@@ -26,9 +29,13 @@ int main(int argc, char const *argv[]){
     pid_t process = fork();
     if (process == 0){
         central_proc(shmid);
+        exit(0);
     } else {
       wait(NULL);
     }
     shmctl(shmid, IPC_RMID, NULL);
+
+    log_it("SIMULATION TERMINATED");
+
     return 0;
 }
