@@ -1,5 +1,5 @@
 CC = gcc
-OBJS = main.o drone_movement.o central_proc.o log.o
+OBJS = main.o drone_movement.o central_proc.o log.o sim_manager.o
 PROG = out
 
 # ------------------------------------------------
@@ -20,6 +20,8 @@ central_proc.o:		central_proc.c central_proc.h
 
 main.o:						main.c central_proc.h
 									${CC} main.c -c -o main.o
+
+sim_manager.o:		sim_manager.c sim_manager.h
 
 out:							${OBJS}
 									${CC} ${OBJS} -pthread -Wall -o out -lm
