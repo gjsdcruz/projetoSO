@@ -6,10 +6,17 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <signal.h>
 #include "drone_movement.h"
+#include "sim_manager.h"
 
 #define PIPE_LOCATION "./pipe"
 #define MAX_DRONES 4
+
+typedef struct {
+  double x;
+  double y;
+} Warehouse;
 
 typedef struct {
   int id;
@@ -27,7 +34,7 @@ typedef struct {
 void init_bases(Base *bases);
 int init_drones(Drone *drones, Base *bases);
 void *manage_drones(void *id_ptr);
-int move_to_warehouse(Drone *drone);
+int move_to_warehouse(Drone *drone, Warehouse *w1);
 void end_drones();
-int create_pipe();
-int central_proc(int shmid);
+void create_pipe();
+int central_proc(Shm_Struct *shared_memory);
