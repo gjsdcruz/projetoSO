@@ -1,9 +1,12 @@
 #include "central_proc.h"
 
+#define N_ELEMS(a)  (sizeof(a) / sizeof((a)[0]))
+
 Warehouse w1;
 
 pthread_t *drone_threads;
 Shm_Struct *shared_memory;
+int n_drones;
 
 // Creates the bases
 void init_bases(Base *bases, int max_x, int max_y) {
@@ -22,9 +25,9 @@ void init_bases(Base *bases, int max_x, int max_y) {
 
 // Creates the drone threads.
 // Returns 0 on success, 1 on failure.
-int init_drones(int n_of_drones, Drone *drones, Base *bases) {
+int init_drones(Drone *drones, Base *bases) {
   drone_threads = (pthread_t*) malloc(sizeof(pthread_t));
-  for(int i = 0; i < n_of_drones; i++) {
+  for(int i = 0; i < n_drones; i++) {
     drones[i].id = i;
     drones[i].state = 0;
     drones[i].x = bases[i % 4].x;
@@ -41,12 +44,14 @@ void *manage_drones(void *drone_ptr) {
   while(1) {
     printf("DRONE %d AT (%f, %f)\n", drone->id, drone->x, drone->y);
     if(drone->state) {
+      pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
       move_to_warehouse(drone, &w1);
       shared_memory->products_loaded += 2;
       drone->state = 0;
       shared_memory->products_delivered += 2;
+      pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
     }
-    sleep(5);
+    sleep(2);
   }
 }
 
@@ -63,8 +68,9 @@ int move_to_warehouse(Drone *drone, Warehouse *w1) {
 }
 
 // Waits for all the drone threads to join
-void end_drones(int n_of_drones) {
-  for(int i = 0; i < n_of_drones; i++) {
+void end_drones() {
+  for(int i = 0; i < n_drones; i++) {
+    pthread_cancel(drone_threads[i]);
     pthread_join(drone_threads[i], NULL);
     printf("DRONE %d JOINED\n", i);
   }
@@ -78,34 +84,51 @@ void create_pipe() {
   }
 }
 
+void end_signal_handler(int signum) {
+  end_drones();
+  unlink(PIPE_LOCATION);
+  exit(0);
+}
+
 // Process running the Central
 int central_proc(int max_x, int max_y, int n_of_drones, Shm_Struct *shm) {
 
   // Enables use of shared memory by Central and Drones
   shared_memory = shm;
 
+  n_drones = n_of_drones;
+
   //###################SIGNAL HANDLING###############################
 
-  // Central must ignore SIGUSR1
+  // Central must ignore SIGUSR1 and SIGINT
   sigset_t block;
   sigemptyset(&block);
   sigaddset(&block, SIGUSR1);
+  sigaddset(&block, SIGINT);
   sigprocmask(SIG_BLOCK, &block, NULL);
+
+  // Central must handle SIGUSR2
+  struct sigaction end_action;
+  end_action.sa_handler = end_signal_handler;
+  sigemptyset(&end_action.sa_mask);
+  end_action.sa_flags = 0;
+  sigaction(SIGUSR2, &end_action, NULL);
 
   //###################################################################
 
   Base bases[4];
-  Drone drones[n_of_drones];
+  Drone drones[n_drones];
   w1.x = 400.0;
   w1.y = 100.0;
   init_bases(bases, max_x, max_y);
-  if(init_drones(n_of_drones, drones, bases)) {
+  if(init_drones(drones, bases)) {
     return 1;
   }
-  drones[2].state = 1;
+  drones[0].state = 1;
   shared_memory->orders_given++;
-  end_drones(n_of_drones);
   create_pipe();
-  unlink(PIPE_LOCATION);
+  while(1) {
+
+  }
   return 0;
 }

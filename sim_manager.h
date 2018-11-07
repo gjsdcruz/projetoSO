@@ -34,6 +34,7 @@ typedef struct {
 
 void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, int refill_rate, int quantity, int time_unit, int n_of_whouses);
 void usr_signal_handler(int signum);
+void kill_signal_handler(int signum);
 void print_statistics(Shm_Struct *shm);
 int create_shm();
 pid_t create_central(int max_x, int max_y, int n_of_drones);

@@ -4,12 +4,15 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/ipc.h>
+#include <sys/wait.h>
 #include "log.h"
 #include "central_proc.h"
 #include <signal.h>
 #include "sim_manager.h"
 
+int shmid;
 Shm_Struct *shared_memory;
+pid_t central;
 
 // Manages the simulation
 void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, int refill_rate, int quantity, int time_unit, int n_of_whouses){
@@ -23,13 +26,19 @@ void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, i
   usr_action.sa_flags = 0;
   sigaction(SIGUSR1, &usr_action, NULL);
 
+  struct sigaction kill_action;
+  kill_action.sa_handler = kill_signal_handler;
+  sigemptyset(&kill_action.sa_mask);
+  kill_action.sa_flags = 0;
+  sigaction(SIGINT, &kill_action, NULL);
+
   //###################################################################
 
   log_it("SIMULATION INITIATED");
 
-  int shmid = create_shm();
+  shmid = create_shm();
 
-  pid_t central_proc = create_central(max_x, max_y, n_of_drones);
+  central = create_central(max_x, max_y, n_of_drones);
 
   while(1) {
 
@@ -77,4 +86,13 @@ void print_statistics(Shm_Struct *shm) {
 // Handles SIGUSR1 by printing statistics
 void usr_signal_handler(int signum) {
   print_statistics(shared_memory);
+}
+
+void kill_signal_handler(int signum) {
+  log_it("SIGINT RECEIVED. TERMINATING SIMULATION...");
+  kill(central, SIGUSR2);
+  wait(NULL);
+  shmctl(shmid, IPC_RMID, NULL);
+  log_it("SIMULATION TERMINATED");
+  exit(0);
 }
