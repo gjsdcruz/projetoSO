@@ -11,7 +11,6 @@
 #include "sim_manager.h"
 
 #define PIPE_LOCATION "./pipe"
-#define MAX_DRONES 4
 
 typedef struct {
   double x;
@@ -31,10 +30,10 @@ typedef struct {
   double y;
 } Base;
 
-void init_bases(Base *bases);
-int init_drones(Drone *drones, Base *bases);
+void init_bases(Base *bases, int max_x, int max_y);
+int init_drones(int n_of_drones, Drone *drones, Base *bases);
 void *manage_drones(void *id_ptr);
 int move_to_warehouse(Drone *drone, Warehouse *w1);
-void end_drones();
+void end_drones(int n_of_drones);
 void create_pipe();
-int central_proc(Shm_Struct *shared_memory);
+int central_proc(int max_x, int max_y, int n_of_drones, Shm_Struct *shared_memory);

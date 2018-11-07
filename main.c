@@ -13,33 +13,13 @@
 #include "central_proc.h"
 #include "log.h"
 
-// Product node struct
-typedef struct pnode {
-    char* name;
-    struct pnode* next;
-} pnode_t;
-
-// Warehouse product node struct
-typedef struct wpnode {
-    char* name;
-    int quantity;
-    struct wpnode* next;
-} wpnode_t;
-
-// Warehouse node struct
-typedef struct wnode {
-    char* name;
-    int chartx, charty;
-    wpnode_t* plist_head;
-} wnode_t;
-
-// Config variables
-    int max_x;
-    int max_y;
-    pnode_t* product_head;
-    int n_of_drones, refill_rate, quantity, time_unit, n_of_whouses;
-
 int main(int argc, char const *argv[]){
+
+  // Config variables
+  int max_x;
+  int max_y;
+  pnode_t* product_head;
+  int n_of_drones, refill_rate, quantity, time_unit, n_of_whouses;
 
 //################# CONFIG PARSING ################################
 // Chunk of code parses info from config.txt to data struct "info" of type llist_t
@@ -61,8 +41,6 @@ int main(int argc, char const *argv[]){
     for (int i=0; i<5; i++){
         fgets(header[i], 255, conf);
     }
-
-
 
     token = strtok(header[0], delim);
     max_x = atoi(token);
@@ -154,10 +132,8 @@ int main(int argc, char const *argv[]){
         }
     }
 
-
 //####################################################################
 
-  sem_t *mutex;
-  sim_manager();
+  sim_manager(max_x, max_y, product_head, n_of_drones, refill_rate, quantity, time_unit, n_of_whouses);
   return 0;
 }

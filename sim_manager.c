@@ -12,7 +12,7 @@
 Shm_Struct *shared_memory;
 
 // Manages the simulation
-void sim_manager(){
+void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, int refill_rate, int quantity, int time_unit, int n_of_whouses){
 
   //###################SIGNAL HANDLING###############################
 
@@ -29,7 +29,7 @@ void sim_manager(){
 
   int shmid = create_shm();
 
-  pid_t central_proc = create_central();
+  pid_t central_proc = create_central(max_x, max_y, n_of_drones);
 
   while(1) {
 
@@ -53,10 +53,10 @@ int create_shm() {
 }
 
 // Creates the Central process
-pid_t create_central() {
+pid_t create_central(int max_x, int max_y, int n_of_drones) {
   pid_t process = fork();
   if (process == 0){
-      central_proc(shared_memory);
+      central_proc(max_x, max_y, n_of_drones, shared_memory);
       exit(0);
   } else {
     return process;

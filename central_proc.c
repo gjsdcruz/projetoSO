@@ -2,20 +2,19 @@
 
 Warehouse w1;
 
-pthread_t drone_threads[MAX_DRONES];
+pthread_t *drone_threads;
 Shm_Struct *shared_memory;
 
 // Creates the bases
-void init_bases(Base *bases) {
-  double max_x = 1200.0, max_y = 800.0;
+void init_bases(Base *bases, int max_x, int max_y) {
   for(int i = 0; i < 4; i++) {
     bases[i].id = i;
     if(i < 2)
       bases[i].y = 0.0;
     else
-      bases[i].y = max_y;
+      bases[i].y = (double)max_y;
     if(i % 3)
-      bases[i].x = max_x;
+      bases[i].x = (double)max_x;
     else
       bases[i].x = 0.0;
   }
@@ -23,8 +22,9 @@ void init_bases(Base *bases) {
 
 // Creates the drone threads.
 // Returns 0 on success, 1 on failure.
-int init_drones(Drone *drones, Base *bases) {
-  for(int i = 0; i < MAX_DRONES; i++) {
+int init_drones(int n_of_drones, Drone *drones, Base *bases) {
+  drone_threads = (pthread_t*) malloc(sizeof(pthread_t));
+  for(int i = 0; i < n_of_drones; i++) {
     drones[i].id = i;
     drones[i].state = 0;
     drones[i].x = bases[i % 4].x;
@@ -63,8 +63,8 @@ int move_to_warehouse(Drone *drone, Warehouse *w1) {
 }
 
 // Waits for all the drone threads to join
-void end_drones() {
-  for(int i = 0; i < MAX_DRONES; i++) {
+void end_drones(int n_of_drones) {
+  for(int i = 0; i < n_of_drones; i++) {
     pthread_join(drone_threads[i], NULL);
     printf("DRONE %d JOINED\n", i);
   }
@@ -79,7 +79,7 @@ void create_pipe() {
 }
 
 // Process running the Central
-int central_proc(Shm_Struct *shm) {
+int central_proc(int max_x, int max_y, int n_of_drones, Shm_Struct *shm) {
 
   // Enables use of shared memory by Central and Drones
   shared_memory = shm;
@@ -95,16 +95,16 @@ int central_proc(Shm_Struct *shm) {
   //###################################################################
 
   Base bases[4];
-  Drone drones[MAX_DRONES];
+  Drone drones[n_of_drones];
   w1.x = 400.0;
   w1.y = 100.0;
-  init_bases(bases);
-  if(init_drones(drones, bases)) {
+  init_bases(bases, max_x, max_y);
+  if(init_drones(n_of_drones, drones, bases)) {
     return 1;
   }
   drones[2].state = 1;
   shared_memory->orders_given++;
-  end_drones();
+  end_drones(n_of_drones);
   create_pipe();
   unlink(PIPE_LOCATION);
   return 0;
