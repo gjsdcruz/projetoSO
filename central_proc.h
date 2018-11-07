@@ -33,7 +33,7 @@ typedef struct {
 void init_bases(Base *bases, int max_x, int max_y);
 int init_drones(Drone *drones, Base *bases);
 void *manage_drones(void *id_ptr);
-int move_to_warehouse(Drone *drone, Warehouse *w1);
+int move_to_warehouse(Drone *drone, wnode_t *w);
 void end_drones();
 void create_pipe();
 int central_proc(int max_x, int max_y, int n_of_drones, Shm_Struct *shared_memory);

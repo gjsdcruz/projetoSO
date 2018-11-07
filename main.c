@@ -134,6 +134,6 @@ int main(int argc, char const *argv[]){
 
 //####################################################################
 
-  sim_manager(max_x, max_y, product_head, n_of_drones, refill_rate, quantity, time_unit, n_of_whouses);
+  sim_manager(max_x, max_y, product_head, n_of_drones, refill_rate, quantity, time_unit, n_of_whouses, whouse);
   return 0;
 }

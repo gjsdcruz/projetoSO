@@ -1,9 +1,5 @@
 #include "central_proc.h"
 
-#define N_ELEMS(a)  (sizeof(a) / sizeof((a)[0]))
-
-Warehouse w1;
-
 pthread_t *drone_threads;
 Shm_Struct *shared_memory;
 int n_drones;
@@ -45,7 +41,7 @@ void *manage_drones(void *drone_ptr) {
     printf("DRONE %d AT (%f, %f)\n", drone->id, drone->x, drone->y);
     if(drone->state) {
       pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-      move_to_warehouse(drone, &w1);
+      move_to_warehouse(drone, &(shared_memory->warehouses[0]));
       shared_memory->products_loaded += 2;
       drone->state = 0;
       shared_memory->products_delivered += 2;
@@ -57,10 +53,10 @@ void *manage_drones(void *drone_ptr) {
 
 // Moves designated drone to designated warehouse
 // Returns 0 on arrival, 1 on failure
-int move_to_warehouse(Drone *drone, Warehouse *w1) {
+int move_to_warehouse(Drone *drone, wnode_t *w) {
   int res;
   do {
-    res = move_towards(&(drone->x), &(drone->y), w1->x, w1->y);
+    res = move_towards(&(drone->x), &(drone->y), w->chartx, w->charty);
     if(res == -2)
       return 1;
   } while(res != -1);
@@ -118,8 +114,7 @@ int central_proc(int max_x, int max_y, int n_of_drones, Shm_Struct *shm) {
 
   Base bases[4];
   Drone drones[n_drones];
-  w1.x = 400.0;
-  w1.y = 100.0;
+
   init_bases(bases, max_x, max_y);
   if(init_drones(drones, bases)) {
     return 1;

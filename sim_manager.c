@@ -13,9 +13,10 @@
 int shmid;
 Shm_Struct *shared_memory;
 pid_t central;
+wnode_t *warehouses;
 
 // Manages the simulation
-void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, int refill_rate, int quantity, int time_unit, int n_of_whouses){
+void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, int refill_rate, int quantity, int time_unit, int n_of_whouses, wnode_t *whouses){
 
   //###################SIGNAL HANDLING###############################
 
@@ -36,6 +37,8 @@ void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, i
 
   log_it("SIMULATION INITIATED");
 
+  warehouses = whouses;
+
   shmid = create_shm();
 
   central = create_central(max_x, max_y, n_of_drones);
@@ -44,8 +47,6 @@ void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, i
 
   }
 
-  shmctl(shmid, IPC_RMID, NULL);
-  log_it("SIMULATION TERMINATED");
 }
 
 // Creates and initializes shared memory
@@ -58,6 +59,7 @@ int create_shm() {
   shared_memory->products_loaded = 0;
   shared_memory->products_delivered = 0;
   shared_memory->avg_time = 0.0;
+  shared_memory->warehouses = warehouses;
   return shmid;
 }
 
