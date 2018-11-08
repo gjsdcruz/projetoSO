@@ -31,7 +31,9 @@ int init_drones(Drone *drones, Base *bases) {
     drones[i].x = bases[i % 4].x;
     drones[i].y = bases[i % 4].y;
     pthread_create(&drone_threads[i], NULL, manage_drones, &drones[i]);
+    #ifdef DEBUG
     printf("DRONE %d CREATED\n", drones[i].id);
+    #endif
   }
   return 0;
 }
@@ -40,7 +42,9 @@ int init_drones(Drone *drones, Base *bases) {
 void *manage_drones(void *drone_ptr) {
   Drone *drone = (Drone*) drone_ptr;
   while(1) {
+    #ifdef DEBUG
     printf("DRONE %d AT (%f, %f)\n", drone->id, drone->x, drone->y);
+    #endif
     if(drone->state) {
       pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
       move_to_warehouse(drone, &(shared_memory->warehouses[0]));
@@ -69,7 +73,9 @@ void end_drones() {
   for(int i = 0; i < n_drones; i++) {
     pthread_cancel(drone_threads[i]);
     pthread_join(drone_threads[i], NULL);
+    #ifdef DEBUG
     printf("DRONE %d JOINED\n", i);
+    #endif
   }
 }
 

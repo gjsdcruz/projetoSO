@@ -3,7 +3,9 @@
 wnode_t *this_wh;
 
 void wh_end_signal_handler(int signum) {
+  #ifdef DEBUG
   printf("%s SHUTTING DOWN\n", this_wh->name);
+  #endif
   exit(0);
 }
 
@@ -36,7 +38,9 @@ void warehouse(int i, Shm_Struct *shm) {
   if(i == 0) {
     shm->products_loaded += 2;
     this_wh->plist_head->quantity -= 2;
+    #ifdef DEBUG
     printf("%s %s STOCK: %d\n", this_wh->name, this_wh->plist_head->name, this_wh->plist_head->quantity);
+    #endif
   }
   while(1) {
 

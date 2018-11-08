@@ -11,6 +11,8 @@
 #include "sim_manager.h"
 #include "warehouse.h"
 
+// #define DEBUG
+
 int shmid, n_wh;
 Shm_Struct *shared_memory;
 pid_t central, *wh_procs;
