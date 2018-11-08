@@ -39,5 +39,6 @@ void kill_signal_handler(int signum);
 void print_statistics(Shm_Struct *shm);
 int create_shm();
 pid_t create_central(int max_x, int max_y, int n_of_drones);
+void create_warehouses();
 
 #endif

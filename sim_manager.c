@@ -9,10 +9,11 @@
 #include "central_proc.h"
 #include <signal.h>
 #include "sim_manager.h"
+#include "warehouse.h"
 
-int shmid;
+int shmid, n_wh;
 Shm_Struct *shared_memory;
-pid_t central;
+pid_t central, *wh_procs;
 wnode_t *warehouses;
 
 // Manages the simulation
@@ -41,6 +42,11 @@ void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, i
 
   shmid = create_shm();
 
+  n_wh = n_of_whouses;
+  wh_procs = (pid_t*) malloc(n_wh * sizeof(pid_t));
+
+  create_warehouses();
+
   central = create_central(max_x, max_y, n_of_drones);
 
   while(1) {
@@ -61,6 +67,16 @@ int create_shm() {
   shared_memory->avg_time = 0.0;
   shared_memory->warehouses = warehouses;
   return shmid;
+}
+
+// Creates all the warehouse processes
+void create_warehouses() {
+  for(int i = 0; i < n_wh; i++) {
+    wh_procs[i] = fork();
+    if(wh_procs[i] == 0) {
+      warehouse(i, shared_memory);
+    }
+  }
 }
 
 // Creates the Central process
@@ -94,6 +110,10 @@ void kill_signal_handler(int signum) {
   log_it("SIGINT RECEIVED. TERMINATING SIMULATION...");
   kill(central, SIGUSR2);
   wait(NULL);
+  for(int i = 0; i < 2; i++) {
+    kill(wh_procs[i], SIGUSR2);
+    wait(NULL);
+  }
   shmctl(shmid, IPC_RMID, NULL);
   log_it("SIMULATION TERMINATED");
   exit(0);

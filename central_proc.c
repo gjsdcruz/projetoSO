@@ -1,5 +1,7 @@
 #include "central_proc.h"
 
+// #define DEBUG
+
 pthread_t *drone_threads;
 Shm_Struct *shared_memory;
 int n_drones;
@@ -42,12 +44,11 @@ void *manage_drones(void *drone_ptr) {
     if(drone->state) {
       pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
       move_to_warehouse(drone, &(shared_memory->warehouses[0]));
-      shared_memory->products_loaded += 2;
-      drone->state = 0;
       shared_memory->products_delivered += 2;
+      drone->state = 0;
       pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
     }
-    sleep(2);
+    sleep(3);
   }
 }
 
