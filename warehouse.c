@@ -9,6 +9,12 @@ void wh_end_signal_handler(int signum) {
 
 void warehouse(int i, Shm_Struct *shm) {
 
+  this_wh = &(shm->warehouses[i]);
+
+  char msg[MSG_SIZE];
+  sprintf(msg, "%s CREATED WITH PID %ld", this_wh->name, (long)getpid());
+  log_it(msg);
+
   //###################SIGNAL HANDLING###############################
 
   // Central must ignore SIGUSR1 and SIGINT
@@ -27,8 +33,6 @@ void warehouse(int i, Shm_Struct *shm) {
 
   //###################################################################
 
-  this_wh = &(shm->warehouses[i]);
-  printf("%s CREATED\n", this_wh->name);
   if(i == 0) {
     shm->products_loaded += 2;
     this_wh->plist_head->quantity -= 2;
