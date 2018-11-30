@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/ipc.h>
+#include <sys/msg.h>
 #include <sys/wait.h>
 #include "log.h"
 #include "central_proc.h"
@@ -13,7 +14,7 @@
 
 // #define DEBUG
 
-int shmid, n_wh;
+int shmid, mq_id, n_wh;
 Shm_Struct *shared_memory;
 pid_t central, *wh_procs;
 wnode_t *warehouses;
@@ -43,6 +44,8 @@ void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, i
   warehouses = whouses;
 
   shmid = create_shm();
+
+  mq_id = msgget(IPC_PRIVATE, IPC_CREAT|0700);
 
   n_wh = n_of_whouses;
   wh_procs = (pid_t*) malloc(n_wh * sizeof(pid_t));
@@ -117,6 +120,7 @@ void kill_signal_handler(int signum) {
     wait(NULL);
   }
   shmctl(shmid, IPC_RMID, NULL);
+  msgctl(mq_id, IPC_RMID, NULL);
   log_it("SIMULATION TERMINATED");
   exit(0);
 }
