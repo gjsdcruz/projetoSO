@@ -1,4 +1,5 @@
 #include "central_proc.h"
+#include "log.h"
 
 // #define DEBUG
 
@@ -87,6 +88,82 @@ void create_pipe() {
   }
 }
 
+// Reads and validates command from pipe
+void read_cmd(pnode_t *phead, int max_x, int max_y) {
+  int fd;
+  if((fd = open(PIPE_LOCATION, O_RDONLY)) < 0) {
+    perror("CANNOT OPEN PIPE FOR READING: ");
+    exit(0);
+  }
+
+  char cmd[MAX_CMD_SIZE];
+  read(fd, cmd, MAX_CMD_SIZE);
+
+  char cmd_type[WORD_SIZE];
+  sscanf(cmd, "%s", cmd_type);
+
+  if(strcmp(cmd_type, "ORDER") == 0) {
+    order_t order;
+    order.name = (char*) malloc(WORD_SIZE);
+    order.prod = (char*) malloc(WORD_SIZE);
+    sscanf(cmd, "ORDER %s prod: %[^,] , %d to: %d, %d ", order.name, order.prod, &(order.quantity), &(order.x), &(order.y));
+    printf("%d\n", order.quantity);
+
+    int found = 0;
+    while(phead != NULL && !found) {
+      if(strcmp(phead->name, order.prod) == 0) {
+        found = 1;
+      }
+      phead = phead->next;
+    }
+    if(!found) {
+      char msg[MAX_CMD_SIZE];
+      sprintf(msg, "PRODUCT UNKNOWN: %s", order.prod);
+      log_it(msg);
+      return;
+    }
+
+    if(order.x > max_x || order.x < 0 || order.y > max_y || order.y < 0) {
+      char msg[MAX_CMD_SIZE];
+      sprintf(msg, "LOCATION OUT OF BOUNDS: (%d, %d)", order.x, order.y);
+      log_it(msg);
+      return;
+    }
+
+    handle_order(order);
+  }
+
+  else if(strcmp(cmd_type, "DRONE") == 0) {
+    int num_drones;
+    // DOESNT DETECT BUG
+    if(sscanf(cmd, "DRONE SET%*c%d", &num_drones) != 1) {
+      char msg[MAX_CMD_SIZE];
+      sprintf(msg, "COMMAND UNKNOWN: %s", cmd);
+      log_it(msg);
+      return;
+    }
+
+    printf("%d\n", num_drones);
+    change_drones(num_drones);
+  }
+
+  else {
+    char msg[MAX_CMD_SIZE];
+    sprintf(msg, "COMMAND UNKNOWN: %s", cmd);
+    log_it(msg);
+  }
+}
+
+// Handles given order
+void handle_order(order_t order) {
+  return;
+}
+
+// Changes number of drones
+void change_drones(int num_drones) {
+  return;
+}
+
 void end_signal_handler(int signum) {
   end_drones();
   unlink(PIPE_LOCATION);
@@ -94,7 +171,7 @@ void end_signal_handler(int signum) {
 }
 
 // Process running the Central
-int central_proc(int max_x, int max_y, int n_of_drones, Shm_Struct *shm) {
+int central_proc(int max_x, int max_y, int n_of_drones, Shm_Struct *shm, pnode_t* phead) {
 
   // Enables use of shared memory by Central and Drones
   shared_memory = shm;
@@ -130,7 +207,7 @@ int central_proc(int max_x, int max_y, int n_of_drones, Shm_Struct *shm) {
   shared_memory->orders_given++;
   create_pipe();
   while(1) {
-
+    read_cmd(phead, max_x, max_y);
   }
   return 0;
 }

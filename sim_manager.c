@@ -18,6 +18,7 @@ int shmid, mq_id, n_wh;
 Shm_Struct *shared_memory;
 pid_t central, *wh_procs;
 wnode_t *warehouses;
+pnode_t *phead;
 
 // Manages the simulation
 void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, int refill_rate, int quantity, int time_unit, int n_of_whouses, wnode_t *whouses){
@@ -47,6 +48,7 @@ void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, i
 
   mq_id = msgget(IPC_PRIVATE, IPC_CREAT|0700);
 
+  phead = product_head;
   n_wh = n_of_whouses;
   wh_procs = (pid_t*) malloc(n_wh * sizeof(pid_t));
 
@@ -92,7 +94,7 @@ void create_warehouses() {
 pid_t create_central(int max_x, int max_y, int n_of_drones) {
   pid_t process = fork();
   if (process == 0){
-      central_proc(max_x, max_y, n_of_drones, shared_memory);
+      central_proc(max_x, max_y, n_of_drones, shared_memory, phead);
       exit(0);
   } else {
     return process;
