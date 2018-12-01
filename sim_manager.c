@@ -54,8 +54,12 @@ void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, i
 
   central = create_central(max_x, max_y, n_of_drones);
 
+  int i = 0;
   while(1) {
-
+    int wh = i % n_wh;
+    refill(wh, quantity);
+    i++;
+    sleep(time_unit * refill_rate);
   }
 
 }
@@ -93,6 +97,29 @@ pid_t create_central(int max_x, int max_y, int n_of_drones) {
   } else {
     return process;
   }
+}
+
+void refill(int wh_id, int quantity) {
+  refill_msg msg;
+  msg.msgtype = 1;
+  msg.wh_id = wh_id;
+
+  int count = 0;
+  time_t t;
+  srand((unsigned) time(&t));
+  wpnode_t *plist = warehouses[wh_id].plist_head, *curr = plist;
+  while(curr != NULL) {
+    count++;
+    curr = curr->next;
+  }
+  int prod = rand() % count;
+  for(int i = 0; i < prod; i++) {
+    plist = plist->next;
+  }
+
+  msg.prod_name = plist->name;
+  msg.quantity = quantity;
+  msgsnd(mq_id, &msg, sizeof(refill_msg), 0);
 }
 
 // Prints statistics stored in shared memory

@@ -3,6 +3,8 @@
 
 #include <sys/shm.h>
 
+#define REFILL_TYPE 1
+
 // Product node struct
 typedef struct pnode {
     char* name;
@@ -23,6 +25,14 @@ typedef struct wnode {
     wpnode_t* plist_head;
 } wnode_t;
 
+// Refill message structure
+typedef struct {
+  long msgtype;
+  int wh_id;
+  char* prod_name;
+  int quantity;
+} refill_msg;
+
 // Shared memory structure
 typedef struct {
   int orders_given;
@@ -38,6 +48,7 @@ void usr_signal_handler(int signum);
 void kill_signal_handler(int signum);
 void print_statistics(Shm_Struct *shm);
 int create_shm();
+void refill(int wh_id, int quantity);
 pid_t create_central(int max_x, int max_y, int n_of_drones);
 void create_warehouses();
 
