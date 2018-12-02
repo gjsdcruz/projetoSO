@@ -5,10 +5,13 @@
 
 pthread_t *drone_threads;
 Shm_Struct *shared_memory;
-int n_drones;
+int n_drones, order_id = 1;
+Base bases[4];
+Drone *drones;
+onode_t *orders_list = NULL;
 
 // Creates the bases
-void init_bases(Base *bases, int max_x, int max_y) {
+void init_bases(int max_x, int max_y) {
   for(int i = 0; i < 4; i++) {
     bases[i].id = i;
     if(i < 2)
@@ -24,11 +27,12 @@ void init_bases(Base *bases, int max_x, int max_y) {
 
 // Creates the drone threads.
 // Returns 0 on success, 1 on failure.
-int init_drones(Drone *drones, Base *bases) {
+int init_drones() {
   drone_threads = (pthread_t*) malloc(sizeof(pthread_t));
   for(int i = 0; i < n_drones; i++) {
     drones[i].id = i;
     drones[i].state = 0;
+    drones[i].curr_order = NULL;
     drones[i].x = bases[i % 4].x;
     drones[i].y = bases[i % 4].y;
     pthread_create(&drone_threads[i], NULL, manage_drones, &drones[i]);
@@ -43,15 +47,9 @@ int init_drones(Drone *drones, Base *bases) {
 void *manage_drones(void *drone_ptr) {
   Drone *drone = (Drone*) drone_ptr;
   while(1) {
-    #ifdef DEBUG
-    printf("DRONE %d AT (%f, %f)\n", drone->id, drone->x, drone->y);
-    #endif
+    printf("DRONE %d, %d\n", drone->id, drone->state);
     if(drone->state) {
-      pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-      move_to_warehouse(drone, &(shared_memory->warehouses[0]));
-      shared_memory->products_delivered += 2;
-      drone->state = 0;
-      pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+      printf("%s, %d\n", drone->curr_order->prod, drone->curr_order->quantity);
     }
     sleep(3);
   }
@@ -88,6 +86,24 @@ void create_pipe() {
   }
 }
 
+// Adds order to orders list
+void add_order_node(order_t *new_order) {
+  onode_t *new_node = (onode_t*) malloc(sizeof(onode_t));
+  new_node->order = new_order;
+  new_node->next = NULL;
+
+  onode_t *curr = orders_list;
+  if(!curr) {
+    orders_list = new_node;
+  }
+  else {
+    while(curr->next) {
+      curr = curr->next;
+    }
+    curr->next = new_node;
+  }
+}
+
 // Reads and validates command from pipe
 void read_cmd(pnode_t *phead, int max_x, int max_y) {
   int fd;
@@ -103,29 +119,28 @@ void read_cmd(pnode_t *phead, int max_x, int max_y) {
   sscanf(cmd, "%s", cmd_type);
 
   if(strcmp(cmd_type, "ORDER") == 0) {
-    order_t order;
-    order.name = (char*) malloc(WORD_SIZE);
-    order.prod = (char*) malloc(WORD_SIZE);
-    sscanf(cmd, "ORDER %s prod: %[^,] , %d to: %d, %d ", order.name, order.prod, &(order.quantity), &(order.x), &(order.y));
-    printf("%d\n", order.quantity);
+    order_t *order = (order_t*) malloc(sizeof(order_t));
+    order->name = (char*) malloc(WORD_SIZE);
+    order->prod = (char*) malloc(WORD_SIZE);
+    sscanf(cmd, "ORDER %s prod: %[^,] , %d to: %d, %d ", order->name, order->prod, &(order->quantity), &(order->x), &(order->y));
 
     int found = 0;
     while(phead != NULL && !found) {
-      if(strcmp(phead->name, order.prod) == 0) {
+      if(strcmp(phead->name, order->prod) == 0) {
         found = 1;
       }
       phead = phead->next;
     }
     if(!found) {
       char msg[MAX_CMD_SIZE];
-      sprintf(msg, "PRODUCT UNKNOWN: %s", order.prod);
+      sprintf(msg, "PRODUCT UNKNOWN: %s", order->prod);
       log_it(msg);
       return;
     }
 
-    if(order.x > max_x || order.x < 0 || order.y > max_y || order.y < 0) {
+    if(order->x > max_x || order->x < 0 || order->y > max_y || order->y < 0) {
       char msg[MAX_CMD_SIZE];
-      sprintf(msg, "LOCATION OUT OF BOUNDS: (%d, %d)", order.x, order.y);
+      sprintf(msg, "LOCATION OUT OF BOUNDS: (%d, %d)", order->x, order->y);
       log_it(msg);
       return;
     }
@@ -152,11 +167,64 @@ void read_cmd(pnode_t *phead, int max_x, int max_y) {
     sprintf(msg, "COMMAND UNKNOWN: %s", cmd);
     log_it(msg);
   }
+
+  close(fd);
 }
 
 // Handles given order
-void handle_order(order_t order) {
-  return;
+void handle_order(order_t *order) {
+  order->id = order_id++;
+
+  Drone *chosen_drone = NULL;
+  wnode_t chosen_whs[shared_memory->n_wh];
+  wnode_t chosen_wh;
+  int k = 0;
+  double min_distance = 0;
+
+  // Find available warehouses
+  for(int i = 0; i < shared_memory->n_wh; i++) {
+    wnode_t this_wh = shared_memory->warehouses[i];
+    wpnode_t *curr = this_wh.plist_head;
+    while(curr != NULL) {
+      if(strcmp(curr->name, order->prod) == 0 && curr->quantity >= order->quantity) {
+        chosen_whs[k++] = this_wh;
+      }
+      curr = curr->next;
+    }
+  }
+
+  // Choose closest drone
+  for(int i = 0; i < n_drones; i++) {
+    if(drones[i].state == 0) {
+      for(int j = 0; j < k; j++) {
+        double rtl = distance(drones[i].x, drones[i].y, chosen_whs[j].chartx, chosen_whs[j].charty);
+        double rtd = distance(chosen_whs[j].chartx, chosen_whs[j].charty, order->x, order->y);
+        if(rtl + rtd < min_distance || !min_distance) {
+          chosen_drone = &drones[i];
+          chosen_wh = chosen_whs[j];
+        }
+      }
+    }
+  }
+
+  // Checks if drone and warehouse were selected
+  if(chosen_drone && k) {
+    // Reserve stock in shared memory
+    wpnode_t *curr = chosen_wh.plist_head;
+    while(strcmp(curr->name, order->prod)) {
+      curr = curr->next;
+    }
+    curr->quantity -= order->quantity;
+
+    // Notify drone to handle delivery
+    chosen_drone->state = 1;
+    chosen_drone->curr_order = order;
+    shared_memory->orders_given++;
+  }
+
+  else {
+    add_order_node(order);
+  }
 }
 
 // Changes number of drones
@@ -172,11 +240,6 @@ void end_signal_handler(int signum) {
 
 // Process running the Central
 int central_proc(int max_x, int max_y, int n_of_drones, Shm_Struct *shm, pnode_t* phead) {
-
-  // Enables use of shared memory by Central and Drones
-  shared_memory = shm;
-
-  n_drones = n_of_drones;
 
   //###################SIGNAL HANDLING###############################
 
@@ -196,15 +259,18 @@ int central_proc(int max_x, int max_y, int n_of_drones, Shm_Struct *shm, pnode_t
 
   //###################################################################
 
-  Base bases[4];
-  Drone drones[n_drones];
+  // Enables use of shared memory by Central and Drones
+  shared_memory = shm;
 
-  init_bases(bases, max_x, max_y);
-  if(init_drones(drones, bases)) {
+  n_drones = n_of_drones;
+
+  init_bases(max_x, max_y);
+
+  drones = (Drone*) malloc(n_of_drones*sizeof(Drone));
+  if(init_drones()) {
     return 1;
   }
-  drones[0].state = 1;
-  shared_memory->orders_given++;
+
   create_pipe();
   while(1) {
     read_cmd(phead, max_x, max_y);

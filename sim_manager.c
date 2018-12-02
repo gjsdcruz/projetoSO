@@ -44,12 +44,12 @@ void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, i
 
   warehouses = whouses;
 
+  n_wh = n_of_whouses;
   shmid = create_shm();
 
   mq_id = msgget(IPC_PRIVATE, IPC_CREAT|0700);
 
   phead = product_head;
-  n_wh = n_of_whouses;
   wh_procs = (pid_t*) malloc(n_wh * sizeof(pid_t));
 
   create_warehouses();
@@ -76,6 +76,7 @@ int create_shm() {
   shared_memory->products_loaded = 0;
   shared_memory->products_delivered = 0;
   shared_memory->avg_time = 0.0;
+  shared_memory->n_wh = n_wh;
   shared_memory->warehouses = warehouses;
   return shmid;
 }

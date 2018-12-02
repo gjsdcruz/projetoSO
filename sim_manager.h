@@ -40,6 +40,7 @@ typedef struct {
   int orders_delivered;
   int products_delivered;
   double avg_time;
+  int n_wh;
   wnode_t *warehouses;
 } Shm_Struct;
 
