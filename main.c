@@ -19,7 +19,7 @@ int main(int argc, char const *argv[]){
   int max_x;
   int max_y;
   pnode_t* product_head;
-  int n_of_drones, refill_rate, quantity, time_unit, n_of_whouses;
+  int n_of_drones, refill_rate, quantity, n_of_whouses;
 
 //################# CONFIG PARSING ################################
 // Chunk of code parses info from config.txt to data struct "info" of type llist_t

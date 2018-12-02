@@ -4,6 +4,7 @@
 #include <sys/shm.h>
 
 #define REFILL_TYPE 1
+#define DRONE_ARRIVAL_TYPE 2
 
 // Product node struct
 typedef struct pnode {
@@ -33,6 +34,12 @@ typedef struct {
   int quantity;
 } refill_msg;
 
+// Drone arrival message structure
+typedef struct {
+  long msgtype;
+  int order_id;
+} drone_msg;
+
 // Shared memory structure
 typedef struct {
   int orders_given;
@@ -43,6 +50,8 @@ typedef struct {
   int n_wh;
   wnode_t *warehouses;
 } Shm_Struct;
+
+int time_unit, mq_id;
 
 void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, int refill_rate, int quantity, int time_unit, int n_of_whouses, wnode_t *whouses);
 void usr_signal_handler(int signum);

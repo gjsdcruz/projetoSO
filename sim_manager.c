@@ -14,7 +14,7 @@
 
 // #define DEBUG
 
-int shmid, mq_id, n_wh;
+int shmid, n_wh;
 Shm_Struct *shared_memory;
 pid_t central, *wh_procs;
 wnode_t *warehouses;

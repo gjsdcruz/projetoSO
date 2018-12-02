@@ -8,17 +8,13 @@
 #include <pthread.h>
 #include <signal.h>
 #include <string.h>
+#include <sys/msg.h>
 #include "drone_movement.h"
 #include "sim_manager.h"
 
 #define PIPE_LOCATION "./pipe"
 #define MAX_CMD_SIZE 100
 #define WORD_SIZE 10
-
-typedef struct {
-  double x;
-  double y;
-} Warehouse;
 
 typedef struct {
   int id;
@@ -37,6 +33,7 @@ typedef struct {
 typedef struct order{
   int id;
   char *name, *prod;
+  wnode_t *wh;
   int quantity;
   int x, y;
 } order_t;
@@ -49,7 +46,9 @@ typedef struct onode {
 void init_bases(int max_x, int max_y);
 int init_drones();
 void *manage_drones(void *id_ptr);
-int move_to_warehouse(Drone *drone, wnode_t *w);
+void move_to_base(Drone *drone);
+void move_to_destination(Drone *drone);
+void move_to_warehouse(Drone *drone, wnode_t *w);
 void end_drones();
 void create_pipe();
 void read_cmd(pnode_t *phead, int max_x, int max_y);
