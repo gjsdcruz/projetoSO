@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -pthread -Wall
+CFLAGS = -D_REENTRANT -pthread -Wall -g
 LDFLAGS = -lm
 OBJS = main.o drone_movement.o central_proc.o warehouse.o log.o sim_manager.o
 PROG = out

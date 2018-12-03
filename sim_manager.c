@@ -58,12 +58,10 @@ void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, i
 
   int i = 0;
   while(1) {
-    int wh = i % n_wh;
+    int wh = (i++ % n_wh) + 1;
     refill(wh, quantity);
-    i++;
     sleep(time_unit * refill_rate);
   }
-
 }
 
 // Creates and initializes shared memory
@@ -103,26 +101,30 @@ pid_t create_central(int max_x, int max_y, int n_of_drones) {
 }
 
 void refill(int wh_id, int quantity) {
-  refill_msg msg;
-  msg.msgtype = 1;
-  msg.wh_id = wh_id;
+  // Creates message to notify WH of refill
+  msg_to_wh msg;
+  msg.msgtype = REFILL_TYPE;
+  msg.wh_id = (long)wh_id;
 
+  // Count how many products there are in WH
   int count = 0;
-  time_t t;
-  srand((unsigned) time(&t));
-  wpnode_t *plist = warehouses[wh_id].plist_head, *curr = plist;
+  wpnode_t *plist = warehouses[wh_id-1].plist_head, *curr = plist;
   while(curr != NULL) {
     count++;
     curr = curr->next;
   }
+  // Randomly choose one
+  time_t t;
+  srand((unsigned) time(&t));
   int prod = rand() % count;
   for(int i = 0; i < prod; i++) {
     plist = plist->next;
   }
 
-  msg.prod_name = plist->name;
+  // Send message
+  msg.prod = plist->name;
   msg.quantity = quantity;
-  msgsnd(mq_id, &msg, sizeof(refill_msg), 0);
+  msgsnd(mq_id, &msg, sizeof(msg_to_wh), 0);
 }
 
 // Prints statistics stored in shared memory
@@ -145,7 +147,7 @@ void kill_signal_handler(int signum) {
   log_it("SIGINT RECEIVED. TERMINATING SIMULATION...");
   kill(central, SIGUSR2);
   wait(NULL);
-  for(int i = 0; i < 2; i++) {
+  for(int i = 0; i < 3; i++) {
     kill(wh_procs[i], SIGUSR2);
     wait(NULL);
   }

@@ -2,7 +2,9 @@
 #define INCL_GUARD
 
 #include <sys/shm.h>
+#include <string.h>
 
+#define MSG_SIZE 100
 #define REFILL_TYPE 1
 #define DRONE_ARRIVAL_TYPE 2
 
@@ -21,24 +23,24 @@ typedef struct wpnode {
 
 // Warehouse node struct
 typedef struct wnode {
+    int id;
     char* name;
     double chartx, charty;
     wpnode_t* plist_head;
 } wnode_t;
 
-// Refill message structure
+// MQ message to warehouse structure
 typedef struct {
-  long msgtype;
-  int wh_id;
-  char* prod_name;
-  int quantity;
-} refill_msg;
+  long wh_id;
+  int msgtype;
+  char *prod;
+  int quantity, order_id;
+} msg_to_wh;
 
-// Drone arrival message structure
+// MQ message from warehouse structure
 typedef struct {
-  long msgtype;
-  int order_id;
-} drone_msg;
+  long order_id;
+} msg_from_wh;
 
 // Shared memory structure
 typedef struct {

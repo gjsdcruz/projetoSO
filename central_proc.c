@@ -30,7 +30,7 @@ void init_bases(int max_x, int max_y) {
 int init_drones() {
   drone_threads = (pthread_t*) malloc(sizeof(pthread_t));
   for(int i = 0; i < n_drones; i++) {
-    drones[i].id = i;
+    drones[i].id = i+1;
     drones[i].state = 0;
     drones[i].curr_order = NULL;
     drones[i].x = bases[i % 4].x;
@@ -48,22 +48,38 @@ void *manage_drones(void *drone_ptr) {
   Drone *drone = (Drone*) drone_ptr;
   while(1) {
     if(drone->state) {
+      
       move_to_warehouse(drone, drone->curr_order->wh);
+
       // Sends message to MQ to notify WH of arrival
-      drone_msg msg;
+      msg_to_wh msg;
+      msg.wh_id = (long)drone->curr_order->wh->id;
       msg.msgtype = DRONE_ARRIVAL_TYPE;
       msg.order_id = drone->curr_order->id;
-      msgsnd(mq_id, &msg, sizeof(drone_msg), 0);
-      // Continue order when WH answers
-      msgrcv(mq_id, NULL, 0, (long)drone->curr_order->id, 0);
+      msg.quantity = drone->curr_order->quantity;
+      msgsnd(mq_id, &msg, sizeof(msg_to_wh), 0);
+
+      // Wait for warehouse to send message back
+      msg_from_wh in_msg;
+      long msg_type = (long)drone->curr_order->id;
+      printf("%p\n", drone);
+      msgrcv(mq_id, &in_msg, 0, msg_type, 0);
+
       move_to_destination(drone);
+      char log_msg[MSG_SIZE];
+      sprintf(log_msg, "ORDER %s-%d DELIVERED", drone->curr_order->name, drone->curr_order->id);
+      log_it(log_msg);
+
+      // Update statistics
       shared_memory->orders_delivered++;
       shared_memory->products_delivered += drone->curr_order->quantity;
+
+      // Release drone and send it to closest base
       drone->curr_order = NULL;
       drone->state = 0;
       move_to_base(drone);
     }
-    sleep(3);
+    sleep(1);
   }
 }
 
@@ -74,7 +90,7 @@ void move_to_destination(Drone *drone) {
     res = move_towards(&(drone->x), &(drone->y), (double)drone->curr_order->x, (double)drone->curr_order->y);
     if(res == -2)
       return;
-    sleep(time_unit);
+    sleep(time_unit * 0.2);
   } while(res != -1);
   sleep(time_unit);
 }
@@ -112,6 +128,7 @@ void move_to_base(Drone *drone) {
 void move_to_warehouse(Drone *drone, wnode_t *w) {
   int res;
   do {
+    printf("LOCATION (%lf, %lf)\n", drone->x, drone->y);
     res = move_towards(&(drone->x), &(drone->y), w->chartx, w->charty);
     if(res == -2)
       return;
@@ -197,6 +214,11 @@ void read_cmd(pnode_t *phead, int max_x, int max_y) {
       return;
     }
 
+    order->id = order_id++;
+    char log_msg[MSG_SIZE];
+    sprintf(log_msg, "ORDER %s-%d RECEIVED", order->name, order->id);
+    log_it(log_msg);
+
     handle_order(order);
   }
 
@@ -225,8 +247,6 @@ void read_cmd(pnode_t *phead, int max_x, int max_y) {
 
 // Handles given order
 void handle_order(order_t *order) {
-  order->id = order_id++;
-
   Drone *chosen_drone = NULL;
   wnode_t chosen_whs[shared_memory->n_wh];
   int k = 0;
@@ -250,7 +270,9 @@ void handle_order(order_t *order) {
       for(int j = 0; j < k; j++) {
         double rtl = distance(drones[i].x, drones[i].y, chosen_whs[j].chartx, chosen_whs[j].charty);
         double rtd = distance(chosen_whs[j].chartx, chosen_whs[j].charty, order->x, order->y);
-        if(rtl + rtd < min_distance || !min_distance) {
+        double total_dist = rtl + rtd;
+        if(total_dist < min_distance || !min_distance) {
+          min_distance = total_dist;
           chosen_drone = &drones[i];
           order->wh = &chosen_whs[j];
         }
@@ -268,9 +290,14 @@ void handle_order(order_t *order) {
     curr->quantity -= order->quantity;
 
     // Notify drone to handle delivery
-    chosen_drone->state = 1;
     chosen_drone->curr_order = order;
+    chosen_drone->state = 1;
     shared_memory->orders_given++;
+    char log_msg[MSG_SIZE];
+    sprintf(log_msg, "ORDER %s-%d GIVEN TO DRONE %d", order->name, order->id, chosen_drone->id);
+    log_it(log_msg);
+
+    printf("DRONE LOCATION (%lf, %lf)\n", chosen_drone->x, chosen_drone->y);
   }
 
   else {

@@ -90,6 +90,7 @@ int main(int argc, char const *argv[]){
     }
 
     for(int i = 0; i<n_of_whouses; i++){
+        whouse[i].id = i+1;
         token = strtok(whouse_data[i], " ");
         whouse[i].name = token;
         token = strtok(NULL, " ");
