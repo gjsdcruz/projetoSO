@@ -53,9 +53,10 @@ typedef struct {
   wnode_t *warehouses;
 } Shm_Struct;
 
-int time_unit, mq_id;
+int mq_id;
+double time_unit;
 
-void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, int refill_rate, int quantity, int time_unit, int n_of_whouses, wnode_t *whouses);
+void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, int refill_rate, int quantity, int n_of_whouses, wnode_t *whouses);
 void usr_signal_handler(int signum);
 void kill_signal_handler(int signum);
 void print_statistics(Shm_Struct *shm);

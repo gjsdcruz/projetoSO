@@ -21,7 +21,7 @@ wnode_t *warehouses;
 pnode_t *phead;
 
 // Manages the simulation
-void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, int refill_rate, int quantity, int time_unit, int n_of_whouses, wnode_t *whouses){
+void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, int refill_rate, int quantity, int n_of_whouses, wnode_t *whouses){
 
   //###################SIGNAL HANDLING###############################
 

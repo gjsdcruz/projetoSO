@@ -77,7 +77,7 @@ int main(int argc, char const *argv[]){
     token = strtok(NULL, delim);
     quantity = atoi(token);
     token = strtok(NULL, delim);
-    time_unit = atoi(token);
+    time_unit = atof(token);
 
     token = strtok(header[4], delim);
     n_of_whouses = atoi(token);
@@ -135,6 +135,6 @@ int main(int argc, char const *argv[]){
 
 //####################################################################
 
-  sim_manager(max_x, max_y, product_head, n_of_drones, refill_rate, quantity, time_unit, n_of_whouses, whouse);
+  sim_manager(max_x, max_y, product_head, n_of_drones, refill_rate, quantity, n_of_whouses, whouse);
   return 0;
 }

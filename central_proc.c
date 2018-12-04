@@ -5,7 +5,7 @@
 
 pthread_t *drone_threads;
 Shm_Struct *shared_memory;
-int n_drones, order_id = 1, time_unit;
+int n_drones, order_id = 1;
 Base bases[4];
 Drone *drones;
 onode_t *orders_list = NULL;
@@ -48,7 +48,7 @@ void *manage_drones(void *drone_ptr) {
   Drone *drone = (Drone*) drone_ptr;
   while(1) {
     if(drone->state) {
-      
+
       move_to_warehouse(drone, drone->curr_order->wh);
 
       // Sends message to MQ to notify WH of arrival
