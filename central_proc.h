@@ -13,8 +13,8 @@
 #include "sim_manager.h"
 
 #define PIPE_LOCATION "./pipe"
-#define MAX_CMD_SIZE 100
-#define WORD_SIZE 10
+#define MAX_CMD_SIZE 200
+#define WORD_SIZE 50
 
 typedef struct {
   int id;

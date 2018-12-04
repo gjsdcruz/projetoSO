@@ -27,9 +27,12 @@ void init_bases(int max_x, int max_y) {
 }
 
 // Creates the drone threads.
-// Returns 0 on success, 1 on failure.
+// Returns 0 on success, -1 on failure.
 int init_drones() {
   drone_threads = (pthread_t*) malloc(sizeof(pthread_t));
+  if(!drone_threads) {
+    return -1;
+  }
   for(int i = 0; i < n_drones; i++) {
     drones[i].id = i+1;
     drones[i].state = 0;
@@ -191,7 +194,11 @@ void read_cmd(pnode_t *phead, int max_x, int max_y) {
   }
 
   char cmd[MAX_CMD_SIZE];
-  read(fd, cmd, MAX_CMD_SIZE);
+  int n_bytes;
+  if((n_bytes = read(fd, cmd, MAX_CMD_SIZE)) > 0) {
+    cmd[n_bytes-1] = '\0';
+  }
+  close(fd);
 
   char cmd_type[WORD_SIZE];
   sscanf(cmd, "%s", cmd_type);
@@ -250,8 +257,6 @@ void read_cmd(pnode_t *phead, int max_x, int max_y) {
     sprintf(msg, "COMMAND UNKNOWN: %s", cmd);
     log_it(msg);
   }
-
-  close(fd);
 }
 
 // Handles given order
@@ -289,26 +294,35 @@ void handle_order(order_t *order) {
     }
   }
 
-  // Checks if drone and warehouse were selected
-  if(chosen_drone && k) {
+  // Checks if warehouse was selected
+  if(k) {
     // Reserve stock in shared memory
     wpnode_t *curr = order->wh->plist_head;
     while(strcmp(curr->name, order->prod)) {
       curr = curr->next;
     }
     curr->quantity -= order->quantity;
+  }
+  else {
+    add_order_node(order);
 
+    char log_msg[MSG_SIZE];
+    sprintf(log_msg, "%s-%d SUSPENDED DUE TO LACK OF STOCK", order->name, order->id);
+    log_it(log_msg);
+    return;
+  }
+
+  // Checks if drone was selected
+  if(chosen_drone) {
     // Notify drone to handle delivery
     chosen_drone->curr_order = order;
     chosen_drone->state = 1;
     shared_memory->orders_given++;
+
     char log_msg[MSG_SIZE];
     sprintf(log_msg, "ORDER %s-%d GIVEN TO DRONE %d", order->name, order->id, chosen_drone->id);
     log_it(log_msg);
-
-    printf("DRONE LOCATION (%lf, %lf)\n", chosen_drone->x, chosen_drone->y);
   }
-
   else {
     add_order_node(order);
   }

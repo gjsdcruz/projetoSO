@@ -59,6 +59,9 @@ int main(int argc, char const *argv[]){
             pnode_t* nav = product_head;
             pnode_t* aux = (pnode_t*) malloc(sizeof(pnode_t));
             aux->name = (char*) malloc(sizeof(char)*30);
+            if(token[strlen(token)-1] == '\n') {
+              token[strlen(token)-1] = '\0';
+            }
             strcpy(aux->name, token);
             aux->next = NULL;
 
