@@ -1,7 +1,8 @@
 #include "central_proc.h"
 #include "log.h"
 
-// #define DEBUG
+#define DEBUG
+#define MOVEMENT_DEBUG
 
 pthread_t *drone_threads;
 Shm_Struct *shared_memory;
@@ -87,12 +88,15 @@ void *manage_drones(void *drone_ptr) {
 void move_to_destination(Drone *drone) {
   int res;
   do {
+    #ifdef MOVEMENT_DEBUG
+    printf("DRONE %d LOCATION: (%lf, %lf)\n", drone->id, drone->x, drone->y);
+    #endif
     res = move_towards(&(drone->x), &(drone->y), (double)drone->curr_order->x, (double)drone->curr_order->y);
     if(res == -2)
       return;
-    sleep(time_unit * 0.2);
+    usleep(time_unit * 1000000);
   } while(res != -1);
-  sleep(time_unit);
+  usleep(time_unit * 1000000);
 }
 
 // Moves designated drone to closest base
@@ -111,11 +115,14 @@ void move_to_base(Drone *drone) {
   if(chosen_base) {
     int res;
     do {
+      #ifdef MOVEMENT_DEBUG
+      printf("DRONE %d LOCATION: (%lf, %lf)\n", drone->id, drone->x, drone->y);
+      #endif
       if(!drone->state) {
         res = move_towards(&(drone->x), &(drone->y), chosen_base->x, chosen_base->y);
         if(res == -2)
           return;
-        sleep(time_unit);
+        usleep(time_unit * 1000000);
       }
       else return;
     } while(res != -1);
@@ -128,11 +135,13 @@ void move_to_base(Drone *drone) {
 void move_to_warehouse(Drone *drone, wnode_t *w) {
   int res;
   do {
-    printf("LOCATION (%lf, %lf)\n", drone->x, drone->y);
+    #ifdef MOVEMENT_DEBUG
+    printf("DRONE %d LOCATION: (%lf, %lf)\n", drone->id, drone->x, drone->y);
+    #endif
     res = move_towards(&(drone->x), &(drone->y), w->chartx, w->charty);
     if(res == -2)
       return;
-    sleep(time_unit);
+    usleep(time_unit * 1000000);
   } while(res != -1);
 }
 
