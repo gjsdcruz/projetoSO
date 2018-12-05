@@ -6,10 +6,11 @@
 
 pthread_t *drone_threads;
 Shm_Struct *shared_memory;
-int n_drones, order_id = 1;
+int n_drones, order_id = 100;
 Base bases[4];
 Drone *drones;
 onode_t *orders_list = NULL;
+int fd;
 
 // Creates the bases
 void init_bases(int max_x, int max_y) {
@@ -50,9 +51,9 @@ int init_drones() {
 // Manages drone behaviour for each event
 void *manage_drones(void *drone_ptr) {
   Drone *drone = (Drone*) drone_ptr;
-  while(1) {
+  while(!shared_memory->time_to_die) {
     if(drone->state) {
-
+      pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
       move_to_warehouse(drone, drone->curr_order->wh);
 
       // Sends message to MQ to notify WH of arrival
@@ -66,7 +67,7 @@ void *manage_drones(void *drone_ptr) {
       // Wait for warehouse to send message back
       msg_from_wh in_msg;
       long msg_type = (long)drone->curr_order->id;
-      printf("%p\n", drone);
+
       msgrcv(mq_id, &in_msg, 0, msg_type, 0);
 
       move_to_destination(drone);
@@ -82,9 +83,11 @@ void *manage_drones(void *drone_ptr) {
       drone->curr_order = NULL;
       drone->state = 0;
       move_to_base(drone);
+      pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
     }
     sleep(1);
   }
+  return NULL;
 }
 
 // Moves designated drone to order destination
@@ -92,7 +95,7 @@ void move_to_destination(Drone *drone) {
   int res;
   do {
     #ifdef MOVEMENT_DEBUG
-    printf("DRONE %d LOCATION: (%lf, %lf)\n", drone->id, drone->x, drone->y);
+    printf("DRONE %d LOCATION: (%lf, %lf) GOING TO (%lf, %lf)\n", drone->id, drone->x, drone->y, (double)drone->curr_order->x, (double)drone->curr_order->y);
     #endif
     res = move_towards(&(drone->x), &(drone->y), (double)drone->curr_order->x, (double)drone->curr_order->y);
     if(res == -2)
@@ -119,7 +122,7 @@ void move_to_base(Drone *drone) {
     int res;
     do {
       #ifdef MOVEMENT_DEBUG
-      printf("DRONE %d LOCATION: (%lf, %lf)\n", drone->id, drone->x, drone->y);
+      printf("DRONE %d LOCATION: (%lf, %lf) GOING TO (%lf, %lf)\n", drone->id, drone->x, drone->y, chosen_base->x, chosen_base->y);
       #endif
       if(!drone->state) {
         res = move_towards(&(drone->x), &(drone->y), chosen_base->x, chosen_base->y);
@@ -129,6 +132,9 @@ void move_to_base(Drone *drone) {
       }
       else return;
     } while(res != -1);
+    #ifdef DEBUG
+    printf("DRONE %d ARRIVED AT BASE\n", drone->id);
+    #endif
   }
   else return;
 }
@@ -139,13 +145,16 @@ void move_to_warehouse(Drone *drone, wnode_t *w) {
   int res;
   do {
     #ifdef MOVEMENT_DEBUG
-    printf("DRONE %d LOCATION: (%lf, %lf)\n", drone->id, drone->x, drone->y);
+    printf("DRONE %d LOCATION: (%lf, %lf) GOING TO (%lf, %lf)\n", drone->id, drone->x, drone->y, w->chartx, w->charty);
     #endif
     res = move_towards(&(drone->x), &(drone->y), w->chartx, w->charty);
     if(res == -2)
       return;
     usleep(time_unit * 1000000);
   } while(res != -1);
+  #ifdef DEBUG
+  printf("DRONE %d ARRIVED AT %s\n", drone->id, w->name);
+  #endif
 }
 
 // Waits for all the drone threads to join
@@ -154,7 +163,7 @@ void end_drones() {
     pthread_cancel(drone_threads[i]);
     pthread_join(drone_threads[i], NULL);
     #ifdef DEBUG
-    printf("DRONE %d JOINED\n", i);
+    printf("DRONE %d JOINED\n", i+1);
     #endif
   }
 }
@@ -187,7 +196,6 @@ void add_order_node(order_t *new_order) {
 
 // Reads and validates command from pipe
 void read_cmd(pnode_t *phead, int max_x, int max_y) {
-  int fd;
   if((fd = open(PIPE_LOCATION, O_RDONLY)) < 0) {
     perror("CANNOT OPEN PIPE FOR READING: ");
     exit(0);
@@ -262,14 +270,14 @@ void read_cmd(pnode_t *phead, int max_x, int max_y) {
 // Handles given order
 void handle_order(order_t *order) {
   Drone *chosen_drone = NULL;
-  wnode_t chosen_whs[shared_memory->n_wh];
+  wnode_t *chosen_whs[shared_memory->n_wh];
   int k = 0;
   double min_distance = 0;
 
   // Find available warehouses
   for(int i = 0; i < shared_memory->n_wh; i++) {
-    wnode_t this_wh = shared_memory->warehouses[i];
-    wpnode_t *curr = this_wh.plist_head;
+    wnode_t *this_wh = &(shared_memory->warehouses[i]);
+    wpnode_t *curr = this_wh->plist_head;
     while(curr != NULL) {
       if(strcmp(curr->name, order->prod) == 0 && curr->quantity >= order->quantity) {
         chosen_whs[k++] = this_wh;
@@ -282,13 +290,13 @@ void handle_order(order_t *order) {
   for(int i = 0; i < n_drones; i++) {
     if(drones[i].state == 0) {
       for(int j = 0; j < k; j++) {
-        double rtl = distance(drones[i].x, drones[i].y, chosen_whs[j].chartx, chosen_whs[j].charty);
-        double rtd = distance(chosen_whs[j].chartx, chosen_whs[j].charty, order->x, order->y);
+        double rtl = distance(drones[i].x, drones[i].y, chosen_whs[j]->chartx, chosen_whs[j]->charty);
+        double rtd = distance(chosen_whs[j]->chartx, chosen_whs[j]->charty, order->x, order->y);
         double total_dist = rtl + rtd;
         if(total_dist < min_distance || !min_distance) {
           min_distance = total_dist;
           chosen_drone = &drones[i];
-          order->wh = &chosen_whs[j];
+          order->wh = chosen_whs[j];
         }
       }
     }
@@ -340,6 +348,7 @@ void change_drones(int num_drones) {
 }
 
 void end_signal_handler(int signum) {
+  close(fd);
   end_drones();
   unlink(PIPE_LOCATION);
   exit(0);
@@ -379,8 +388,9 @@ int central_proc(int max_x, int max_y, int n_of_drones, Shm_Struct *shm, pnode_t
   }
 
   create_pipe();
-  while(1) {
+  while(!shm->time_to_die) {
     read_cmd(phead, max_x, max_y);
   }
+
   return 0;
 }

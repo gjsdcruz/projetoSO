@@ -1,5 +1,7 @@
 #include "warehouse.h"
 
+#define DEBUG
+
 wnode_t *this_wh;
 
 void wh_end_signal_handler(int signum) {
@@ -43,14 +45,22 @@ void warehouse(int i, Shm_Struct *shm) {
     // Separate drone arrivals from refills
     if(msg.msgtype == DRONE_ARRIVAL_TYPE) {
       // Process order and send message when ready
+      #ifdef DEBUG
+      printf("%s READY TO LOAD DRONE\n", this_wh->name);
+      #endif
+
       sleep(msg.quantity * time_unit);
-      printf("BLYAT %d\n", msg.quantity);
+
       shm->products_loaded += msg.quantity;
       msg_from_wh out_msg;
       out_msg.order_id = (long)msg.order_id;
       msgsnd(mq_id, &out_msg, sizeof(msg_from_wh), 0);
+
+      #ifdef DEBUG
+      printf("%s FINISHED LOADING DRONE\n", this_wh->name);
+      #endif
     }
-    else {
+    else if(msg.msgtype == REFILL_TYPE) {
       // Find product to refill
       wpnode_t *curr = this_wh->plist_head;
       while(curr && strcmp(curr->name, msg.prod)) {
@@ -63,6 +73,8 @@ void warehouse(int i, Shm_Struct *shm) {
       sprintf(log_msg, "%s WAS REFILLED", this_wh->name);
       log_it(log_msg);
     }
+    else {
+      wh_end_signal_handler(0);
+    }
   }
-  exit(0);
 }

@@ -7,6 +7,7 @@
 #define MSG_SIZE 100
 #define REFILL_TYPE 1
 #define DRONE_ARRIVAL_TYPE 2
+#define DIE_TYPE 3
 
 // Product node struct
 typedef struct pnode {
@@ -49,7 +50,7 @@ typedef struct {
   int orders_delivered;
   int products_delivered;
   double avg_time;
-  int n_wh;
+  int n_wh, time_to_die;
   wnode_t *warehouses;
 } Shm_Struct;
 

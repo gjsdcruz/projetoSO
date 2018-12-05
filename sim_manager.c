@@ -14,7 +14,7 @@
 
 // #define DEBUG
 
-int shmid, n_wh;
+int shmid, wh_shm_id, n_wh;
 Shm_Struct *shared_memory;
 pid_t central, *wh_procs;
 wnode_t *warehouses;
@@ -57,11 +57,27 @@ void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, i
   central = create_central(max_x, max_y, n_of_drones);
 
   int i = 0;
-  while(1) {
+  while(!shared_memory->time_to_die) {
     int wh = (i++ % n_wh) + 1;
     refill(wh, quantity);
-    sleep(time_unit * refill_rate);
+    usleep(time_unit * refill_rate * 1000000);
   }
+
+  kill(central, SIGUSR2);
+  wait(NULL);
+  printf("CENTRAL GONE BABY\n");
+  msg_to_wh die_msg;
+  die_msg.msgtype = DIE_TYPE;
+  for(int i = 0; i < n_wh; i++) {
+    die_msg.wh_id = i+1;
+    msgsnd(mq_id, &die_msg, sizeof(msg_to_wh), 0);
+    wait(NULL);
+  }
+  shmctl(wh_shm_id, IPC_RMID, NULL);
+  shmctl(shmid, IPC_RMID, NULL);
+  msgctl(mq_id, IPC_RMID, NULL);
+  log_it("SIMULATION TERMINATED");
+  exit(0);
 }
 
 // Creates and initializes shared memory
@@ -75,7 +91,12 @@ int create_shm() {
   shared_memory->products_delivered = 0;
   shared_memory->avg_time = 0.0;
   shared_memory->n_wh = n_wh;
-  shared_memory->warehouses = warehouses;
+  wh_shm_id = shmget(IPC_PRIVATE, n_wh*sizeof(wnode_t), IPC_CREAT|0700);
+  shared_memory->warehouses = (wnode_t*) shmat(wh_shm_id, NULL, 0);
+  for(int i = 0; i < n_wh; i++) {
+    shared_memory->warehouses[i] = warehouses[i];
+  }
+  shared_memory->time_to_die = 0;
   return shmid;
 }
 
@@ -145,14 +166,5 @@ void usr_signal_handler(int signum) {
 
 void kill_signal_handler(int signum) {
   log_it("SIGINT RECEIVED. TERMINATING SIMULATION...");
-  kill(central, SIGUSR2);
-  wait(NULL);
-  for(int i = 0; i < 3; i++) {
-    kill(wh_procs[i], SIGUSR2);
-    wait(NULL);
-  }
-  shmctl(shmid, IPC_RMID, NULL);
-  msgctl(mq_id, IPC_RMID, NULL);
-  log_it("SIMULATION TERMINATED");
-  exit(0);
+  shared_memory->time_to_die = 1;
 }
