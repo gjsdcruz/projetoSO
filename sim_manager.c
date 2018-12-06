@@ -49,6 +49,10 @@ void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, i
 
   //###################################################################
 
+  // Initialize log semaphore before logging beginning of simulation
+  sem_unlink("LOG");
+  log_sem = sem_open("LOG", O_CREAT|O_EXCL, 0700, 1);
+
   log_it("SIMULATION INITIATED");
 
   warehouses = whouses;
@@ -227,5 +231,9 @@ void kill_signal_handler(int signum) {
   msgctl(mq_id, IPC_RMID, NULL);
 
   log_it("SIMULATION TERMINATED");
+
+  // Remove log semaphore
+  sem_close(log_sem);
+  sem_unlink("LOG");
   exit(0);
 }

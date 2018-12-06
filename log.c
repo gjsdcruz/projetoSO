@@ -8,6 +8,8 @@ void log_it(char *msg) {
   time_info = localtime(&raw_time);
 
   char to_log[MAX_MSG_SIZE];
+
+  sem_wait(log_sem);
   FILE *fp = fopen(LOG_LOCATION, "a");
 
   sprintf(to_log, "[%02d:%02d:%02d] %s\n", time_info->tm_hour, time_info->tm_min, time_info->tm_sec, msg);
@@ -15,4 +17,5 @@ void log_it(char *msg) {
   fprintf(fp, "%s", to_log);
 
   fclose(fp);
+  sem_post(log_sem);
 }

@@ -3,6 +3,7 @@
 
 #include <sys/shm.h>
 #include <string.h>
+#include <semaphore.h>
 
 #define MSG_SIZE 100
 #define REFILL_TYPE 1
@@ -62,6 +63,7 @@ typedef struct {
 
 int mq_id;
 double time_unit;
+sem_t *log_sem;
 
 void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, int refill_rate, int quantity, int n_of_whouses, wnode_t *whouses);
 void usr_signal_handler(int signum);
