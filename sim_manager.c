@@ -19,6 +19,7 @@ Shm_Struct *shared_memory;
 pid_t central, *wh_procs;
 wnode_t *warehouses;
 pnode_t *phead;
+id_node *id_list;
 
 // Manages the simulation
 void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, int refill_rate, int quantity, int n_of_whouses, wnode_t *whouses){
@@ -53,7 +54,7 @@ void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, i
   warehouses = whouses;
 
   n_wh = n_of_whouses;
-  shmid = create_shm();
+  id_list = create_shm();
 
   mq_id = msgget(IPC_PRIVATE, IPC_CREAT|0700);
 
@@ -73,8 +74,7 @@ void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, i
 }
 
 // Creates and initializes shared memory
-int create_shm() {
-  int shmid;
+id_node *create_shm() {
   shmid = shmget(IPC_PRIVATE, sizeof(Shm_Struct), IPC_CREAT|0700);
   shared_memory = (Shm_Struct*) shmat(shmid, NULL, 0);
   shared_memory->orders_given = 0;
@@ -83,12 +83,55 @@ int create_shm() {
   shared_memory->products_delivered = 0;
   shared_memory->avg_time = 0.0;
   shared_memory->n_wh = n_wh;
+  // Copy warehouses data to shared memory
   wh_shm_id = shmget(IPC_PRIVATE, n_wh*sizeof(wnode_t), IPC_CREAT|0700);
   shared_memory->warehouses = (wnode_t*) shmat(wh_shm_id, NULL, 0);
+  id_node *id_list = NULL, *curr_id = NULL;
   for(int i = 0; i < n_wh; i++) {
-    shared_memory->warehouses[i] = warehouses[i];
+    shared_memory->warehouses[i].id = warehouses[i].id;
+    shared_memory->warehouses[i].name = (char*) malloc(WORD_SIZE * sizeof(char));
+    strcpy(shared_memory->warehouses[i].name, warehouses[i].name);
+    shared_memory->warehouses[i].chartx = warehouses[i].chartx;
+    shared_memory->warehouses[i].charty = warehouses[i].charty;
+
+    // Create linked list of IDs and shared memory pieces containing each warehouse product and its stock
+    shared_memory->warehouses[i].plist_head = NULL;
+    wpnode_t *aux = warehouses[i].plist_head, *curr = shared_memory->warehouses[i].plist_head;
+    while(aux) {
+      id_node *new_id = (id_node*) malloc(sizeof(id_node));
+      new_id->id = shmget(IPC_PRIVATE, sizeof(wpnode_t), IPC_CREAT|0700);
+      new_id->next = NULL;
+
+      if(!id_list) {
+        id_list = new_id;
+        curr_id = new_id;
+      }
+
+      else {
+        curr_id->next = new_id;
+      }
+
+      wpnode_t *new_prod = (wpnode_t*) shmat(new_id->id, NULL, 0);
+      new_prod->name = (char*) malloc(sizeof(char)*WORD_SIZE);
+      strcpy(new_prod->name, aux->name);
+      new_prod->quantity = aux->quantity;
+      new_prod->next = NULL;
+
+      if(!shared_memory->warehouses[i].plist_head) {
+        shared_memory->warehouses[i].plist_head = new_prod;
+        curr = new_prod;
+      }
+
+      else {
+        curr->next = new_prod;
+        curr = curr->next;
+      }
+
+      aux = aux->next;
+    }
   }
-  return shmid;
+
+  return id_list;
 }
 
 // Creates all the warehouse processes
@@ -172,6 +215,13 @@ void kill_signal_handler(int signum) {
   }
 
   // Release resources
+  id_node *curr = id_list, *prev = NULL;
+  while(curr) {
+    shmctl(curr->id, IPC_RMID, NULL);
+    prev = curr;
+    curr = curr->next;
+    free(prev);
+  }
   shmctl(wh_shm_id, IPC_RMID, NULL);
   shmctl(shmid, IPC_RMID, NULL);
   msgctl(mq_id, IPC_RMID, NULL);

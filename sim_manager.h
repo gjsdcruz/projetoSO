@@ -43,6 +43,12 @@ typedef struct {
   long order_id;
 } msg_from_wh;
 
+// Struct to hold shared memory IDs
+typedef struct id_node {
+  int id;
+  struct id_node *next;
+} id_node;
+
 // Shared memory structure
 typedef struct {
   int orders_given;
@@ -61,7 +67,7 @@ void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, i
 void usr_signal_handler(int signum);
 void kill_signal_handler(int signum);
 void print_statistics(Shm_Struct *shm);
-int create_shm();
+id_node *create_shm();
 void refill(int wh_id, int quantity);
 pid_t create_central(int max_x, int max_y, int n_of_drones);
 void create_warehouses();

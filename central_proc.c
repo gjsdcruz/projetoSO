@@ -47,7 +47,6 @@ int init_drones() {
     printf("DRONE %d CREATED\n", drones[i]->id);
     #endif
   }
-  printf("INIT DRONE %p\n", &drones[0]);
   return 0;
 }
 
@@ -56,8 +55,6 @@ void *manage_drones(void *drone_ptr) {
   Drone *drone = (Drone*) drone_ptr;
   while(1) {
     if(drone->state) {
-      printf("IM DRONE %d LOCATION (%lf, %lf)\n", drone->id, drone->x, drone->y);
-      printf("%p\n", drone);
       pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
       move_to_warehouse(drone, drone->curr_order->wh);
 
@@ -292,7 +289,6 @@ void handle_order(order_t *order) {
   // Choose closest drone
   for(int i = 0; i < n_drones; i++) {
     if(drones[i]->state == 0) {
-      printf("GOT HERE\n");
       for(int j = 0; j < k; j++) {
         double rtl = distance(drones[i]->x, drones[i]->y, chosen_whs[j]->chartx, chosen_whs[j]->charty);
         double rtd = distance(chosen_whs[j]->chartx, chosen_whs[j]->charty, order->x, order->y);
@@ -342,8 +338,8 @@ void handle_order(order_t *order) {
 
 // Changes number of drones
 void change_drones(int num_drones) {
-  // Do nothing
-  if(num_drones == n_drones) return;
+  // Do nothing if given invalid number of drones
+  if(num_drones == n_drones || num_drones < 0) return;
 
   // Add new drones
   if(num_drones > n_drones) {
@@ -372,11 +368,63 @@ void change_drones(int num_drones) {
       printf("DRONE %d CREATED\n", new_drones[i]->id);
       #endif
     }
-    printf("NEW DRONES: %p\n", new_drones[0]);
+
     drones = new_drones;
     drone_threads = new_drone_threads;
-    n_drones = num_drones;
   }
+
+  // Remove drones
+  else {
+    // Check if the number of drones can be reduced to given number
+    int count_occupied = 0;
+    for(int i = 0; i < n_drones; i++) {
+      if(drones[i]->state) count_occupied++;
+    }
+    if(count_occupied > num_drones) {
+      printf("TOO MANY ACTIVE DRONES\n");
+      return;
+    }
+
+    // New arrays
+    Drone **new_drones = (Drone**) malloc(num_drones*sizeof(Drone*));
+    pthread_t **new_drone_threads = (pthread_t**) malloc(num_drones*sizeof(pthread_t*));
+
+    // Put occupied drones in new arrays
+    int count = 0;
+    for(int i = 0; i < n_drones; i++) {
+      if(drones[i]->state) {
+        new_drones[i] = drones[i];
+        new_drone_threads[i] = drone_threads[i];
+        count++;
+      }
+    }
+
+    // Put drones in array until full
+    int i = 0;
+    while(count < num_drones) {
+      if(!drones[i]->state) {
+        new_drones[i] = drones[i];
+        new_drone_threads[i] = drone_threads[i];
+        count++; i++;
+      }
+    }
+
+    // Wait for remaining drones to finish
+    for(; i < n_drones; i++) {
+      if(!drones[i]->state) {
+        pthread_cancel(*drone_threads[i]);
+        pthread_join(*drone_threads[i], NULL);
+        #ifdef DEBUG
+        printf("DRONE %d JOINED\n", i+1);
+        #endif
+      }
+    }
+
+    drones = new_drones;
+    drone_threads = new_drone_threads;
+  }
+
+  n_drones = num_drones;
   return;
 }
 
