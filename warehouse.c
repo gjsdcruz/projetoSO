@@ -15,19 +15,10 @@ void warehouse(int i, Shm_Struct *shm) {
 
   //###################SIGNAL HANDLING###############################
 
-  // Central must ignore SIGUSR1 and SIGINT
+  // Warehouses must ignore all signals
   sigset_t block;
-  sigemptyset(&block);
-  sigaddset(&block, SIGUSR1);
-  sigaddset(&block, SIGINT);
+  sigfillset(&block);
   sigprocmask(SIG_BLOCK, &block, NULL);
-
-  // Central must handle SIGUSR2
-  struct sigaction wh_end_action;
-  wh_end_action.sa_handler = wh_end_signal_handler;
-  sigemptyset(&wh_end_action.sa_mask);
-  wh_end_action.sa_flags = 0;
-  sigaction(SIGUSR2, &wh_end_action, NULL);
 
   //###################################################################
 

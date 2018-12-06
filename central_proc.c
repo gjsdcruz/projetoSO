@@ -4,11 +4,11 @@
 #define DEBUG
 #define MOVEMENT_DEBUG
 
-pthread_t *drone_threads;
+pthread_t **drone_threads;
 Shm_Struct *shared_memory;
 int n_drones, order_id = 100;
 Base bases[4];
-Drone *drones;
+Drone **drones;
 onode_t *orders_list = NULL;
 int fd;
 
@@ -30,29 +30,34 @@ void init_bases(int max_x, int max_y) {
 // Creates the drone threads.
 // Returns 0 on success, -1 on failure.
 int init_drones() {
-  drone_threads = (pthread_t*) malloc(sizeof(pthread_t));
+  drone_threads = (pthread_t**) malloc(n_drones * sizeof(pthread_t*));
   if(!drone_threads) {
     return -1;
   }
   for(int i = 0; i < n_drones; i++) {
-    drones[i].id = i+1;
-    drones[i].state = 0;
-    drones[i].curr_order = NULL;
-    drones[i].x = bases[i % 4].x;
-    drones[i].y = bases[i % 4].y;
-    pthread_create(&drone_threads[i], NULL, manage_drones, &drones[i]);
+    drone_threads[i] = (pthread_t*) malloc(sizeof(pthread_t));
+    drones[i] = (Drone*) malloc(sizeof(Drone));
+    drones[i]->id = i+1;
+    drones[i]->state = 0;
+    drones[i]->curr_order = NULL;
+    drones[i]->x = bases[i % 4].x;
+    drones[i]->y = bases[i % 4].y;
+    pthread_create(drone_threads[i], NULL, manage_drones, drones[i]);
     #ifdef DEBUG
-    printf("DRONE %d CREATED\n", drones[i].id);
+    printf("DRONE %d CREATED\n", drones[i]->id);
     #endif
   }
+  printf("INIT DRONE %p\n", &drones[0]);
   return 0;
 }
 
 // Manages drone behaviour for each event
 void *manage_drones(void *drone_ptr) {
   Drone *drone = (Drone*) drone_ptr;
-  while(!shared_memory->time_to_die) {
+  while(1) {
     if(drone->state) {
+      printf("IM DRONE %d LOCATION (%lf, %lf)\n", drone->id, drone->x, drone->y);
+      printf("%p\n", drone);
       pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
       move_to_warehouse(drone, drone->curr_order->wh);
 
@@ -87,7 +92,6 @@ void *manage_drones(void *drone_ptr) {
     }
     sleep(1);
   }
-  return NULL;
 }
 
 // Moves designated drone to order destination
@@ -160,8 +164,8 @@ void move_to_warehouse(Drone *drone, wnode_t *w) {
 // Waits for all the drone threads to join
 void end_drones() {
   for(int i = 0; i < n_drones; i++) {
-    pthread_cancel(drone_threads[i]);
-    pthread_join(drone_threads[i], NULL);
+    pthread_cancel(*drone_threads[i]);
+    pthread_join(*drone_threads[i], NULL);
     #ifdef DEBUG
     printf("DRONE %d JOINED\n", i+1);
     #endif
@@ -256,7 +260,6 @@ void read_cmd(pnode_t *phead, int max_x, int max_y) {
       return;
     }
 
-    printf("%d\n", num_drones);
     change_drones(num_drones);
   }
 
@@ -288,14 +291,15 @@ void handle_order(order_t *order) {
 
   // Choose closest drone
   for(int i = 0; i < n_drones; i++) {
-    if(drones[i].state == 0) {
+    if(drones[i]->state == 0) {
+      printf("GOT HERE\n");
       for(int j = 0; j < k; j++) {
-        double rtl = distance(drones[i].x, drones[i].y, chosen_whs[j]->chartx, chosen_whs[j]->charty);
+        double rtl = distance(drones[i]->x, drones[i]->y, chosen_whs[j]->chartx, chosen_whs[j]->charty);
         double rtd = distance(chosen_whs[j]->chartx, chosen_whs[j]->charty, order->x, order->y);
         double total_dist = rtl + rtd;
         if(total_dist < min_distance || !min_distance) {
           min_distance = total_dist;
-          chosen_drone = &drones[i];
+          chosen_drone = drones[i];
           order->wh = chosen_whs[j];
         }
       }
@@ -338,11 +342,40 @@ void handle_order(order_t *order) {
 
 // Changes number of drones
 void change_drones(int num_drones) {
-  int diff;
-  if((diff = num_drones - n_drones) > 0) {
-    for(int i = 0; i < diff; i++) {
+  // Do nothing
+  if(num_drones == n_drones) return;
 
+  // Add new drones
+  if(num_drones > n_drones) {
+    // New arrays
+    Drone **new_drones = (Drone**) malloc(num_drones*sizeof(Drone*));
+    pthread_t **new_drone_threads = (pthread_t**) malloc(num_drones*sizeof(pthread_t*));
+
+    // Put existent drones in new arrays
+    for(int i = 0; i < n_drones; i++) {
+      new_drones[i] = drones[i];
+      new_drone_threads[i] = drone_threads[i];
     }
+
+    // Fill new arrays with new drones
+    for(int i = n_drones; i < num_drones; i++) {
+      new_drones[i] = (Drone*) malloc(sizeof(Drone));
+      new_drone_threads[i] = (pthread_t*) malloc(sizeof(pthread_t));
+      new_drones[i]->id = i+1;
+      new_drones[i]->state = 0;
+      new_drones[i]->curr_order = NULL;
+      new_drones[i]->x = bases[i % 4].x;
+      new_drones[i]->y = bases[i % 4].y;
+      pthread_create(new_drone_threads[i], NULL, manage_drones, new_drones[i]);
+
+      #ifdef DEBUG
+      printf("DRONE %d CREATED\n", new_drones[i]->id);
+      #endif
+    }
+    printf("NEW DRONES: %p\n", new_drones[0]);
+    drones = new_drones;
+    drone_threads = new_drone_threads;
+    n_drones = num_drones;
   }
   return;
 }
@@ -382,15 +415,13 @@ int central_proc(int max_x, int max_y, int n_of_drones, Shm_Struct *shm, pnode_t
 
   init_bases(max_x, max_y);
 
-  drones = (Drone*) malloc(n_of_drones*sizeof(Drone));
+  drones = (Drone**) malloc(n_of_drones*sizeof(Drone*));
   if(init_drones()) {
     return 1;
   }
 
   create_pipe();
-  while(!shm->time_to_die) {
+  while(1) {
     read_cmd(phead, max_x, max_y);
   }
-
-  return 0;
 }
