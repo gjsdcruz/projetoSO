@@ -213,6 +213,7 @@ void usr_signal_handler(int signum) {
 
 void kill_signal_handler(int signum) {
   log_it("SIGINT RECEIVED. TERMINATING SIMULATION...");
+  signal(SIGUSR1, SIG_IGN);
 
   // Signal Central to shut down and wait
   kill(central, SIGUSR2);
