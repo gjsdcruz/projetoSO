@@ -80,7 +80,7 @@ void *manage_drones(void *drone_ptr) {
       move_to_destination(drone);
       drone->curr_order->end_time = clock();
       char log_msg[MSG_SIZE];
-      sprintf(log_msg, "ORDER %s-%d DELIVERED", drone->curr_order->name, drone->curr_order->id);
+      sprintf(log_msg, "ORDER %s-%d DELIVERED BY DRONE %d", drone->curr_order->name, drone->curr_order->id, drone->id);
       log_it(log_msg);
 
       // Update statistics
@@ -418,6 +418,7 @@ void change_drones(int num_drones) {
       #endif
     }
 
+    pthread_cond_broadcast(&aux_cond);
     drones = new_drones;
     drone_threads = new_drone_threads;
   }
@@ -475,6 +476,10 @@ void change_drones(int num_drones) {
     drone_threads = new_drone_threads;
   }
 
+  char log_msg[MSG_SIZE];
+  sprintf(log_msg, "NEW DRONE NUMBER: %d", num_drones);
+  log_it(log_msg);
+
   n_drones = num_drones;
   return;
 }
@@ -488,7 +493,7 @@ void *handle_orders_list() {
     onode_t *curr = orders_list;
     while(curr) {
       #ifdef DEBUG
-      printf("ORDER %s STILL WAITING\n", curr->order->name);
+      printf("ORDER %s WAITING\n", curr->order->name);
       #endif
       handle_order(curr->order);
       curr = curr->next;
