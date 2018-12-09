@@ -36,6 +36,7 @@ typedef struct order{
   wnode_t *wh;
   int quantity;
   int x, y;
+  long start_time, end_time;
 } order_t;
 
 typedef struct onode {
@@ -51,6 +52,7 @@ void move_to_destination(Drone *drone);
 void move_to_warehouse(Drone *drone, wnode_t *w);
 void end_drones();
 void create_pipe();
+void add_order_node(order_t *new_order);
 void read_cmd(pnode_t *phead, int max_x, int max_y);
 void handle_order(order_t *order);
 void change_drones(int num_drones);

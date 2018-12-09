@@ -73,11 +73,15 @@ void *manage_drones(void *drone_ptr) {
       msgrcv(mq_id, &in_msg, 0, msg_type, 0);
 
       move_to_destination(drone);
+      drone->curr_order->end_time = clock();
       char log_msg[MSG_SIZE];
       sprintf(log_msg, "ORDER %s-%d DELIVERED", drone->curr_order->name, drone->curr_order->id);
       log_it(log_msg);
 
       // Update statistics
+      double order_time = (double)(drone->curr_order->end_time - drone->curr_order->start_time) / CLOCKS_PER_SEC * 1000;
+      printf("%lf\n", order_time);
+      shared_memory->avg_time = (double)(shared_memory->avg_time*shared_memory->orders_delivered + order_time) / (shared_memory->orders_delivered + 1);
       shared_memory->orders_delivered++;
       shared_memory->products_delivered += drone->curr_order->quantity;
 
@@ -240,6 +244,7 @@ void read_cmd(pnode_t *phead, int max_x, int max_y) {
     }
 
     order->id = order_id++;
+    order->start_time = clock();
     char log_msg[MSG_SIZE];
     sprintf(log_msg, "ORDER %s-%d RECEIVED", order->name, order->id);
     log_it(log_msg);

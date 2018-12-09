@@ -113,6 +113,7 @@ id_node *create_shm() {
 
       else {
         curr_id->next = new_id;
+        curr_id = new_id;
       }
 
       wpnode_t *new_prod = (wpnode_t*) shmat(new_id->id, NULL, 0);
