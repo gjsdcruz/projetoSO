@@ -4,9 +4,9 @@
 #define DEBUG
 #define MOVEMENT_DEBUG
 
-pthread_t **drone_threads;
-pthread_cond_t state_cond = PTHREAD_COND_INITIALIZER;
-pthread_mutex_t **state_mutexes;
+pthread_t **drone_threads, *aux_threads;
+pthread_cond_t state_cond = PTHREAD_COND_INITIALIZER, aux_cond = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t **state_mutexes, orders_aux_mutex = PTHREAD_MUTEX_INITIALIZER;
 Shm_Struct *shared_memory;
 int n_drones, order_id = 100, drone_id = 1;
 Base bases[4];
@@ -93,7 +93,9 @@ void *manage_drones(void *drone_ptr) {
 
       // Release drone and send it to closest base
       drone->curr_order = NULL;
+      free(drone->curr_order);
       drone->state = 0;
+      pthread_cond_broadcast(&aux_cond);
       move_to_base(drone);
       pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
     }
@@ -209,6 +211,23 @@ void add_order_node(order_t *new_order) {
   }
 }
 
+// Remove order from orders list
+void remove_order_node(order_t *order) {
+  onode_t *curr = orders_list, *prev = NULL;
+  while(curr && curr->order != order) {
+    prev = curr;
+    curr = curr->next;
+  }
+
+  if(!prev) {
+    orders_list = curr->next;
+  }
+
+  else {
+    prev->next = curr->next;
+  }
+}
+
 // Reads and validates command from pipe
 void read_cmd(pnode_t *phead, int max_x, int max_y) {
   if((fd = open(PIPE_LOCATION, O_RDONLY)) < 0) {
@@ -259,20 +278,21 @@ void read_cmd(pnode_t *phead, int max_x, int max_y) {
     sprintf(log_msg, "ORDER %s-%d RECEIVED", order->name, order->id);
     log_it(log_msg);
 
-    handle_order(order);
+    add_order_node(order);
+    pthread_cond_broadcast(&aux_cond);
   }
 
   else if(strcmp(cmd_type, "DRONE") == 0) {
-    int num_drones;
+    int *num_drones = (int*) malloc(sizeof(int));
     // DOESNT DETECT BUG
-    if(sscanf(cmd, "DRONE SET%*c%d", &num_drones) != 1) {
+    if(sscanf(cmd, "DRONE SET%*c%d", num_drones) != 1) {
       char msg[MAX_CMD_SIZE];
       sprintf(msg, "COMMAND UNKNOWN: %s", cmd);
       log_it(msg);
       return;
     }
 
-    change_drones(num_drones);
+    pthread_create(&aux_threads[1], NULL, handle_drone_changes, num_drones);
   }
 
   else {
@@ -319,8 +339,8 @@ void handle_order(order_t *order) {
     }
   }
 
-  // Checks if warehouse was selected
-  if(k) {
+  // Checks if warehouse and drone were selected
+  if(k && chosen_drone) {
     // Reserve stock in shared memory
     wpnode_t *curr = order->wh->plist_head;
     while(strcmp(curr->name, order->prod)) {
@@ -329,18 +349,7 @@ void handle_order(order_t *order) {
     sem_wait(shm_sem);
     curr->quantity -= order->quantity;
     sem_post(shm_sem);
-  }
-  else {
-    add_order_node(order);
 
-    char log_msg[MSG_SIZE];
-    sprintf(log_msg, "%s-%d SUSPENDED DUE TO LACK OF STOCK", order->name, order->id);
-    log_it(log_msg);
-    return;
-  }
-
-  // Checks if drone was selected
-  if(chosen_drone) {
     // Notify drone to handle delivery
     chosen_drone->curr_order = order;
     chosen_drone->state = 1;
@@ -348,14 +357,23 @@ void handle_order(order_t *order) {
     shared_memory->orders_given++;
     sem_post(shm_sem);
 
+    remove_order_node(order);
     pthread_cond_broadcast(&state_cond);
 
     char log_msg[MSG_SIZE];
     sprintf(log_msg, "ORDER %s-%d GIVEN TO DRONE %d", order->name, order->id, chosen_drone->id);
     log_it(log_msg);
   }
+
+  else if(!k) {
+    char log_msg[MSG_SIZE];
+    sprintf(log_msg, "%s-%d SUSPENDED DUE TO LACK OF STOCK", order->name, order->id);
+    log_it(log_msg);
+    return;
+  }
+
   else {
-    add_order_node(order);
+    return;
   }
 }
 
@@ -461,14 +479,61 @@ void change_drones(int num_drones) {
   return;
 }
 
-void end_signal_handler(int signum) {
-  close(fd);
-  end_drones();
+void *handle_orders_list() {
+  while(1) {
+    pthread_mutex_lock(&orders_aux_mutex);
+    pthread_cond_wait(&aux_cond, &orders_aux_mutex);
+    pthread_mutex_unlock(&orders_aux_mutex);
+
+    onode_t *curr = orders_list;
+    while(curr) {
+      #ifdef DEBUG
+      printf("ORDER %s STILL WAITING\n", curr->order->name);
+      #endif
+      handle_order(curr->order);
+      curr = curr->next;
+    }
+  }
+}
+
+void *handle_drone_changes(void *new_n_drones) {
+  int *num_drones_ptr = (int*) new_n_drones;
+  int num_drones = *num_drones_ptr;
+  change_drones(num_drones);
+  free(new_n_drones);
+  #ifdef DEBUG
+  printf("AUXILIARY THREAD EXITED\n");
+  #endif
+  pthread_exit(NULL);
+}
+
+void destroy_mutexes() {
   for(int i = 0; i < drone_id-1; i++) {
     if(state_mutexes[i]) {
       pthread_mutex_destroy(state_mutexes[i]);
     }
   }
+}
+
+void create_aux() {
+  aux_threads = (pthread_t*) malloc(sizeof(pthread_t));
+  pthread_create(&aux_threads[0], NULL, handle_orders_list, NULL);
+}
+
+void end_aux() {
+  pthread_cancel(aux_threads[0]);
+  pthread_join(aux_threads[0], NULL);
+  #ifdef DEBUG
+  printf("AUXILIARY THREAD JOINED\n");
+  #endif
+  return;
+}
+
+void end_signal_handler(int signum) {
+  close(fd);
+  end_drones();
+  end_aux();
+  destroy_mutexes();
   pthread_cond_destroy(&state_cond);
   unlink(PIPE_LOCATION);
   exit(0);
@@ -506,6 +571,7 @@ int central_proc(int max_x, int max_y, int n_of_drones, Shm_Struct *shm, pnode_t
   if(init_drones()) {
     return 1;
   }
+  create_aux();
 
   create_pipe();
   while(1) {
