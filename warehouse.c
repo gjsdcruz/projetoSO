@@ -42,7 +42,9 @@ void warehouse(int i, Shm_Struct *shm) {
 
       sleep(msg.quantity * time_unit);
 
+      sem_wait(shm_sem);
       shm->products_loaded += msg.quantity;
+      sem_post(shm_sem);
       msg_from_wh out_msg;
       out_msg.order_id = (long)msg.order_id;
       msgsnd(mq_id, &out_msg, sizeof(msg_from_wh), 0);
@@ -58,7 +60,9 @@ void warehouse(int i, Shm_Struct *shm) {
         curr = curr->next;
       }
       // Update stock
+      sem_wait(shm_sem);
       curr->quantity += msg.quantity;
+      sem_post(shm_sem);
 
       char log_msg[MSG_SIZE];
       sprintf(log_msg, "%s WAS REFILLED", this_wh->name);

@@ -6,9 +6,9 @@
 
 pthread_t **drone_threads;
 pthread_cond_t state_cond = PTHREAD_COND_INITIALIZER;
-pthread_mutex_t *state_mutexes;
+pthread_mutex_t **state_mutexes;
 Shm_Struct *shared_memory;
-int n_drones, order_id = 100;
+int n_drones, order_id = 100, drone_id = 1;
 Base bases[4];
 Drone **drones;
 onode_t *orders_list = NULL;
@@ -29,19 +29,20 @@ void init_bases(int max_x, int max_y) {
   }
 }
 
-// Creates the drone threads.
+// Creates the drone threads and respective mutexes.
 // Returns 0 on success, -1 on failure.
 int init_drones() {
   drone_threads = (pthread_t**) malloc(n_drones * sizeof(pthread_t*));
-  state_mutexes = (pthread_mutex_t*) malloc(n_drones * sizeof(pthread_mutex_t));
-  if(!drone_threads) {
+  state_mutexes = (pthread_mutex_t**) malloc(n_drones * sizeof(pthread_mutex_t*));
+  if(!drone_threads || !state_mutexes) {
     return -1;
   }
   for(int i = 0; i < n_drones; i++) {
-    state_mutexes[i] = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
+    state_mutexes[i] = (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
+    *state_mutexes[i] = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
     drone_threads[i] = (pthread_t*) malloc(sizeof(pthread_t));
     drones[i] = (Drone*) malloc(sizeof(Drone));
-    drones[i]->id = i+1;
+    drones[i]->id = drone_id++;
     drones[i]->state = 0;
     drones[i]->curr_order = NULL;
     drones[i]->x = bases[i % 4].x;
@@ -84,10 +85,11 @@ void *manage_drones(void *drone_ptr) {
 
       // Update statistics
       double order_time = (double)(drone->curr_order->end_time - drone->curr_order->start_time) / CLOCKS_PER_SEC * 1000;
-      printf("%lf\n", order_time);
+      sem_wait(shm_sem);
       shared_memory->avg_time = (double)(shared_memory->avg_time*shared_memory->orders_delivered + order_time) / (shared_memory->orders_delivered + 1);
       shared_memory->orders_delivered++;
       shared_memory->products_delivered += drone->curr_order->quantity;
+      sem_post(shm_sem);
 
       // Release drone and send it to closest base
       drone->curr_order = NULL;
@@ -96,10 +98,9 @@ void *manage_drones(void *drone_ptr) {
       pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
     }
     else {
-      pthread_mutex_lock(&state_mutexes[drone->id-1]);
-      printf("GOT HERE\n");
-      pthread_cond_wait(&state_cond, &state_mutexes[drone->id-1]);
-      pthread_mutex_unlock(&state_mutexes[drone->id-1]);
+      pthread_mutex_lock(state_mutexes[drone->id-1]);
+      pthread_cond_wait(&state_cond, state_mutexes[drone->id-1]);
+      pthread_mutex_unlock(state_mutexes[drone->id-1]);
     }
   }
 }
@@ -177,7 +178,7 @@ void end_drones() {
     pthread_cancel(*drone_threads[i]);
     pthread_join(*drone_threads[i], NULL);
     #ifdef DEBUG
-    printf("DRONE %d JOINED\n", i+1);
+    printf("DRONE %d JOINED\n", drones[i]->id);
     #endif
   }
 }
@@ -293,9 +294,11 @@ void handle_order(order_t *order) {
     wnode_t *this_wh = &(shared_memory->warehouses[i]);
     wpnode_t *curr = this_wh->plist_head;
     while(curr != NULL) {
+      sem_wait(shm_sem);
       if(strcmp(curr->name, order->prod) == 0 && curr->quantity >= order->quantity) {
         chosen_whs[k++] = this_wh;
       }
+      sem_post(shm_sem);
       curr = curr->next;
     }
   }
@@ -323,7 +326,9 @@ void handle_order(order_t *order) {
     while(strcmp(curr->name, order->prod)) {
       curr = curr->next;
     }
+    sem_wait(shm_sem);
     curr->quantity -= order->quantity;
+    sem_post(shm_sem);
   }
   else {
     add_order_node(order);
@@ -339,7 +344,9 @@ void handle_order(order_t *order) {
     // Notify drone to handle delivery
     chosen_drone->curr_order = order;
     chosen_drone->state = 1;
+    sem_wait(shm_sem);
     shared_memory->orders_given++;
+    sem_post(shm_sem);
 
     pthread_cond_broadcast(&state_cond);
 
@@ -362,18 +369,26 @@ void change_drones(int num_drones) {
     // New arrays
     Drone **new_drones = (Drone**) malloc(num_drones*sizeof(Drone*));
     pthread_t **new_drone_threads = (pthread_t**) malloc(num_drones*sizeof(pthread_t*));
+    pthread_mutex_t **new_state_mutexes = (pthread_mutex_t**) malloc((num_drones-n_drones+drone_id-1)*sizeof(pthread_mutex_t));
 
-    // Put existent drones in new arrays
+    // Put existent drones and mutexes in new arrays
     for(int i = 0; i < n_drones; i++) {
       new_drones[i] = drones[i];
       new_drone_threads[i] = drone_threads[i];
     }
+    int aux = drone_id-1;
+    for(int i = 0; i < aux; i++) {
+      new_state_mutexes[i] = state_mutexes[i];
+    }
 
-    // Fill new arrays with new drones
+    // Fill new arrays with new drones and new mutexes
     for(int i = n_drones; i < num_drones; i++) {
+      new_state_mutexes[aux] = (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
+      *new_state_mutexes[aux++] = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
+      state_mutexes = new_state_mutexes;
       new_drones[i] = (Drone*) malloc(sizeof(Drone));
       new_drone_threads[i] = (pthread_t*) malloc(sizeof(pthread_t));
-      new_drones[i]->id = i+1;
+      new_drones[i]->id = drone_id++;
       new_drones[i]->state = 0;
       new_drones[i]->curr_order = NULL;
       new_drones[i]->x = bases[i % 4].x;
@@ -430,6 +445,8 @@ void change_drones(int num_drones) {
       if(!drones[i]->state) {
         pthread_cancel(*drone_threads[i]);
         pthread_join(*drone_threads[i], NULL);
+        pthread_mutex_destroy(state_mutexes[i]);
+        state_mutexes[i] = NULL;
         #ifdef DEBUG
         printf("DRONE %d JOINED\n", i+1);
         #endif
@@ -447,8 +464,10 @@ void change_drones(int num_drones) {
 void end_signal_handler(int signum) {
   close(fd);
   end_drones();
-  for(int i = 0; i < n_drones; i++) {
-    pthread_mutex_destroy(&state_mutexes[i]);
+  for(int i = 0; i < drone_id-1; i++) {
+    if(state_mutexes[i]) {
+      pthread_mutex_destroy(state_mutexes[i]);
+    }
   }
   pthread_cond_destroy(&state_cond);
   unlink(PIPE_LOCATION);

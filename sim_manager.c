@@ -58,17 +58,23 @@ void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, i
   warehouses = whouses;
 
   n_wh = n_of_whouses;
+
+  // Initialize shared memory semaphore to synchronize future accesses
+  sem_unlink("SHM");
+  shm_sem = sem_open("SHM", O_CREAT|O_EXCL, 0700, 1);
   id_list = create_shm();
 
+  // Create message queue to communicate between processes
   mq_id = msgget(IPC_PRIVATE, IPC_CREAT|0700);
 
   phead = product_head;
   wh_procs = (pid_t*) malloc(n_wh * sizeof(pid_t));
-
   create_warehouses();
 
   central = create_central(max_x, max_y, n_of_drones);
 
+  // At refill rate, select a warehouse using round robin algorithm
+  // and send refill message to selected warehouse
   int i = 0;
   while(1) {
     int wh = (i++ % n_wh) + 1;
@@ -189,6 +195,7 @@ void refill(int wh_id, int quantity) {
 
 // Prints statistics stored in shared memory
 void print_statistics(Shm_Struct *shm) {
+  sem_wait(shm_sem);
   printf("\n-----------STATISTICS-----------\n");
   printf("TOTAL ORDERS GIVEN TO DRONES: %d\n", shm->orders_given);
   printf("TOTAL PRODUCTS LOADED: %d\n", shm->products_loaded);
@@ -196,6 +203,7 @@ void print_statistics(Shm_Struct *shm) {
   printf("TOTAL PRODUCTS DELIVERED: %d\n", shm->products_delivered);
   printf("AVERAGE ORDER DELIVERY TIME: %.3fs\n", shm->avg_time);
   printf("--------------------------------\n\n");
+  sem_post(shm_sem);
 }
 
 // Handles SIGUSR1 by printing statistics
@@ -233,8 +241,10 @@ void kill_signal_handler(int signum) {
 
   log_it("SIMULATION TERMINATED");
 
-  // Remove log semaphore
+  // Remove log and shared memory semaphores
   sem_close(log_sem);
   sem_unlink("LOG");
+  sem_close(shm_sem);
+  sem_unlink("SHM");
   exit(0);
 }

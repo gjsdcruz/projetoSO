@@ -63,7 +63,7 @@ typedef struct {
 
 int mq_id;
 double time_unit;
-sem_t *log_sem;
+sem_t *log_sem, *shm_sem;
 
 void sim_manager(int max_x, int max_y, pnode_t *product_head, int n_of_drones, int refill_rate, int quantity, int n_of_whouses, wnode_t *whouses);
 void usr_signal_handler(int signum);
