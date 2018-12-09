@@ -5,6 +5,8 @@
 #define MOVEMENT_DEBUG
 
 pthread_t **drone_threads;
+pthread_cond_t state_cond = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t *state_mutexes;
 Shm_Struct *shared_memory;
 int n_drones, order_id = 100;
 Base bases[4];
@@ -31,10 +33,12 @@ void init_bases(int max_x, int max_y) {
 // Returns 0 on success, -1 on failure.
 int init_drones() {
   drone_threads = (pthread_t**) malloc(n_drones * sizeof(pthread_t*));
+  state_mutexes = (pthread_mutex_t*) malloc(n_drones * sizeof(pthread_mutex_t));
   if(!drone_threads) {
     return -1;
   }
   for(int i = 0; i < n_drones; i++) {
+    state_mutexes[i] = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
     drone_threads[i] = (pthread_t*) malloc(sizeof(pthread_t));
     drones[i] = (Drone*) malloc(sizeof(Drone));
     drones[i]->id = i+1;
@@ -91,7 +95,12 @@ void *manage_drones(void *drone_ptr) {
       move_to_base(drone);
       pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
     }
-    sleep(1);
+    else {
+      pthread_mutex_lock(&state_mutexes[drone->id-1]);
+      printf("GOT HERE\n");
+      pthread_cond_wait(&state_cond, &state_mutexes[drone->id-1]);
+      pthread_mutex_unlock(&state_mutexes[drone->id-1]);
+    }
   }
 }
 
@@ -231,7 +240,7 @@ void read_cmd(pnode_t *phead, int max_x, int max_y) {
     }
     if(!found) {
       char msg[MAX_CMD_SIZE];
-      sprintf(msg, "PRODUCT UNKNOWN: %s", order->prod);
+      sprintf(msg, "%s HAS PRODUCT UNKNOWN: %s", order->name, order->prod);
       log_it(msg);
       return;
     }
@@ -331,6 +340,8 @@ void handle_order(order_t *order) {
     chosen_drone->curr_order = order;
     chosen_drone->state = 1;
     shared_memory->orders_given++;
+
+    pthread_cond_broadcast(&state_cond);
 
     char log_msg[MSG_SIZE];
     sprintf(log_msg, "ORDER %s-%d GIVEN TO DRONE %d", order->name, order->id, chosen_drone->id);
@@ -436,6 +447,10 @@ void change_drones(int num_drones) {
 void end_signal_handler(int signum) {
   close(fd);
   end_drones();
+  for(int i = 0; i < n_drones; i++) {
+    pthread_mutex_destroy(&state_mutexes[i]);
+  }
+  pthread_cond_destroy(&state_cond);
   unlink(PIPE_LOCATION);
   exit(0);
 }
