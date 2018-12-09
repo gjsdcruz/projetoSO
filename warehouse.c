@@ -1,3 +1,9 @@
+/******************************
+Code created by:
+   Diogo Ferrer, 2017247199
+   Guilherme Cruz, 2016223968
+*******************************/
+
 #include "warehouse.h"
 
 #define DEBUG

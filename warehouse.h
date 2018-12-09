@@ -1,3 +1,9 @@
+/******************************
+Code created by:
+   Diogo Ferrer, 2017247199
+   Guilherme Cruz, 2016223968
+*******************************/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
